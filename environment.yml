@@ -1,0 +1,29 @@
+# Conda equivalent of requirements.txt.
+#
+#   conda env create -f environment.yml
+#   conda activate oasis-radiomics
+#
+# DO NOT UPGRADE TO NumPy 2.x: NumPy 2.x with PyRadiomics 3.0.1 produced a
+# segmentation fault during feature extraction in this project's validated
+# environment. See requirements.txt for the full rationale.
+#
+# Python 3.10 is used here because it is the version the pilot was validated on
+# and the one for which PyRadiomics 3.0.1 has prebuilt wheels; Python 3.11 works
+# too but compiles PyRadiomics from source.
+name: oasis-radiomics
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - numpy=1.26.4
+  - scipy>=1.10,<2.0
+  - pandas>=2.0
+  - pyyaml>=6.0
+  - nibabel>=5.0,<6.0
+  - simpleitk>=2.0,<3.0
+  - pywavelets>=1.4
+  - pytest>=7.0
+  - pip
+  - pip:
+      - pyradiomics==3.0.1
+      - pykwalify>=1.8

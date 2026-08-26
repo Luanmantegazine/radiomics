@@ -1,0 +1,51 @@
+# ---------------------------------------------------------------------------
+# OASIS-3 longitudinal hippocampal radiomics - pinned environment
+# ---------------------------------------------------------------------------
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install --upgrade pip setuptools wheel
+#   pip install numpy==1.26.4
+#   pip install --no-build-isolation -r requirements.txt
+#
+# Why the two-step install:
+#   PyRadiomics 3.0.1 imports NumPy inside its setup.py without declaring it as
+#   a build requirement, so NumPy must already be present and build isolation
+#   must be off. On Python >= 3.11 there is no PyRadiomics wheel and it is
+#   compiled from source; a C toolchain is required.
+#
+# ###########################################################################
+# # DO NOT UPGRADE TO NumPy 2.x                                             #
+# #                                                                         #
+# # NumPy 2.x with PyRadiomics 3.0.1 produced a SEGMENTATION FAULT during   #
+# # feature extraction in this project's validated environment. PyRadiomics  #
+# # 3.0.1 is built against the NumPy 1.x C ABI. Keep NumPy pinned to         #
+# # 1.26.4 until PyRadiomics itself ships a NumPy 2 compatible release, and  #
+# # re-validate the whole pipeline before changing this pin.                 #
+# ###########################################################################
+#
+# Reference environment (the one the pilot was validated on):
+#   Python 3.10, NumPy 1.26.4, PyRadiomics 3.0.1, SimpleITK 2.x, macOS ARM64
+# Also validated on:
+#   Python 3.11, NumPy 1.26.4, PyRadiomics 3.0.1, SimpleITK 2.5.6, Linux x86_64
+
+# --- hard pins: these change feature values -------------------------------
+numpy==1.26.4
+pyradiomics==3.0.1
+
+# --- image IO and numerics -------------------------------------------------
+SimpleITK>=2.0,<3.0
+nibabel>=5.0,<6.0
+scipy>=1.10,<2.0
+
+# --- tabular output and configuration -------------------------------------
+pandas>=2.0
+PyYAML>=6.0
+
+# --- PyRadiomics runtime dependencies (installed transitively; listed for
+#     provenance) ----------------------------------------------------------
+PyWavelets>=1.4
+pykwalify>=1.8
+six>=1.16
+
+# --- development ----------------------------------------------------------
+pytest>=7.0
