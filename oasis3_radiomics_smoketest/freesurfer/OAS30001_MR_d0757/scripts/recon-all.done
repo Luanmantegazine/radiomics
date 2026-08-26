@@ -1,8 +1,0 @@
-------------------------------
-SUBJECT OAS30001_MR_d0757
-RUNTIME_HOURS 11.794
-PROCESSOR x86_64
-OS Linux
-VERSION $Id: recon-all,v 1.482 2014/08/26 20:36:16 nicks Exp $
-CMDPATH /nrgpackages/tools/freesurfer53-patch/bin/recon-all
-CMDARGS -s OAS30001_MR_d0757 -sd /data/CNDA/build/OASIS/19700101_000000/fsrfer/OAS30001_MR_d0757/PROCESSED -qcache -all -hippo-subfields -nocubic -mprage -i /data/CNDA/build/OASIS/19700101_000000/fsrfer/OAS30001_MR_d0757/RAW/5/file.dcm

@@ -163,6 +163,27 @@ credentialed and is not distributed with this repository.
 
 ## Data
 
-OASIS-3 requires credentials from [nitrc.org](https://www.nitrc.org/) /
-[oasis-brains.org](https://www.oasis-brains.org/). Do not commit `.mgz`,
-`.nii` or `.nii.gz` files; `.gitignore` blocks them.
+**No OASIS-3 data is tracked in this repository.** OASIS-3 is credentialed: it
+requires an account on [nitrc.org](https://www.nitrc.org/) /
+[oasis-brains.org](https://www.oasis-brains.org/), and its imaging data must not
+be redistributed. A fresh clone therefore contains code only — fetch the
+sessions yourself:
+
+```bash
+# the two pilot sessions used by the integration test
+python cli.py download --ids freesurfer_ids.csv --nitrc-user <your-nitrc-user>
+```
+
+This writes `oasis3_radiomics_smoketest/freesurfer/<session>/mri/{T1.mgz,aseg.mgz}`,
+which is what `--input` expects. `.gitignore` blocks `*.mgz`, `*.nii`, `*.nii.gz`,
+the download directories and the `results/` outputs, so re-downloading never
+dirties the working tree.
+
+Until the data is present, `tests/test_integration.py` skips itself and the
+remaining unit tests still run.
+
+> **History note.** The FreeSurfer outputs were tracked in the initial commit and
+> were later removed from tracking. Removing them stops *future* clones from
+> growing, but the blobs remain reachable in the existing history — purging them
+> for good needs a history rewrite (`git filter-repo` / BFG) and a force-push,
+> which is a separate, coordinated operation.
