@@ -1,37 +1,41 @@
 # ---------------------------------------------------------------------------
-# OASIS-3 longitudinal hippocampal radiomics - pipeline configuration
+# OASIS-3 Alzheimer radiomics acquisition protocol v1.0
 # ---------------------------------------------------------------------------
-# Every methodological knob lives here, never in code. Options marked
-# "TODO: methodological decision required" are placeholders that MUST be
-# discussed and justified before this pipeline is used for a real study.
+# This file is now the frozen acquisition configuration. Changes to image
+# preprocessing, ROI definitions or feature extraction must increment the
+# protocol version documented in oasis_radiomics/protocol.py.
 # ---------------------------------------------------------------------------
 
-# --- PyRadiomics extractor settings ---------------------------------------
-# Passed verbatim to radiomics.featureextractor.RadiomicsFeatureExtractor.
 radiomics:
-  binWidth: 25              # TODO: methodological decision required (bin width
-                            # drives every texture feature; must be justified
-                            # against ROI size and intensity range).
-  normalize: true           # TODO: methodological decision required.
-  normalizeScale: 100       # TODO: methodological decision required.
+  # Fixed-bin-width discretisation. This is the value used in the validated
+  # pilot and is now frozen for acquisition consistency.
+  binWidth: 25
+
+  # MRI has no absolute intensity scale. PyRadiomics z-score normalisation is
+  # applied independently to each T1 before discretisation.
+  normalize: true
+  normalizeScale: 100
+
   correctMask: true
   label: 1
-  enableCExtensions: false  # kept false: matches the validated environment.
-  # resampledPixelSpacing: null
-  #   TODO: methodological decision required. OASIS-3 FreeSurfer conformed
-  #   volumes are already 1x1x1 mm isotropic, so no resampling is applied.
-  #   Any multi-scanner harmonisation strategy (resampling, ComBat, ...) is
-  #   explicitly out of scope for this stage.
 
-# --- Image types -----------------------------------------------------------
-# Wavelet / LoG stay OFF on purpose: enabling them multiplies the feature count
-# and needs its own methodological justification.
+  # Disabled because the validated macOS/arm64 environment was unstable with
+  # native extensions in earlier dependency combinations. This changes speed,
+  # not the mathematical feature definitions.
+  enableCExtensions: false
+
+  # OASIS-3 FreeSurfer conformed T1/segmentation volumes are used in their
+  # common native processing geometry. No second interpolation is introduced
+  # during acquisition.
+  # resampledPixelSpacing: null
+
+# Acquisition is intentionally restricted to Original T1. Wavelet and LoG can
+# only be introduced as a separate protocol/version, never mid-cohort.
 image_types:
   Original: true
-  # Wavelet: {}   # TODO: methodological decision required
-  # LoG: {sigma: [1.0, 3.0]}  # TODO: methodological decision required
 
-# --- Feature classes -------------------------------------------------------
+# The classes must remain in this order. Individual feature names are frozen in
+# oasis_radiomics/protocol.py and total exactly 107 per ROI.
 features:
   firstorder: true
   shape: true
@@ -41,26 +45,38 @@ features:
   gldm: true
   ngtdm: true
 
-# --- Regions of interest ---------------------------------------------------
-# FreeSurfer aseg labels. Left and right are ALWAYS extracted separately:
-# a bilateral union mask is two spatially disconnected objects and its shape
-# features are not interpretable.
+# ---------------------------------------------------------------------------
+# Alzheimer ROIs: 8 bilateral anatomical regions = 16 masks/session.
+# All labels are read from FreeSurfer aparc+aseg.mgz.
+# ---------------------------------------------------------------------------
 rois:
   left_hippocampus: [17]
   right_hippocampus: [53]
+  left_amygdala: [18]
+  right_amygdala: [54]
+  left_entorhinal: [1006]
+  right_entorhinal: [2006]
+  left_fusiform: [1007]
+  right_fusiform: [2007]
+  left_inferior_temporal: [1009]
+  right_inferior_temporal: [2009]
+  left_middle_temporal: [1015]
+  right_middle_temporal: [2015]
+  left_parahippocampal: [1016]
+  right_parahippocampal: [2016]
+  left_precuneus: [1025]
+  right_precuneus: [2025]
 
-# --- Bilateral handling ----------------------------------------------------
 bilateral:
-  # Recreate the legacy union mask and run PyRadiomics on it. OFF by default.
-  # Only kept for backwards compatibility with the original smoke test.
+  # Never send a disconnected left+right union mask to PyRadiomics.
   extract_union_mask: false
 
-  # Left/right pairing used to build derived columns.
+  # Hippocampal bilateral derivatives are retained for compatibility with the
+  # longitudinal pilot. Every one of the 16 raw ROIs remains available in the
+  # long table independently.
   left_roi: left_hippocampus
   right_roi: right_hippocampus
 
-  # Features that are physically additive: they get a "_total" column
-  # (left + right) instead of / in addition to "_mean".
   additive_features:
     - mask_voxels
     - mask_volume_mm3
@@ -68,33 +84,21 @@ bilateral:
     - original_shape_VoxelVolume
     - original_shape_SurfaceArea
 
-  # Asymmetry index: (left - right) / (left + right).
-  # "positive_only": computed only when both sides are strictly positive.
-  #                  Signed features (Skewness, ClusterShade, Imc1, ...) get NaN,
-  #                  because the normalised difference is unstable around zero.
-  # "always":        computed whenever left + right != 0.
-  # TODO: methodological decision required for signed texture features.
   asymmetry_mode: positive_only
 
-# --- Quality control -------------------------------------------------------
 quality_control:
-  # Hard sanity bounds on a single hippocampus (mm^3). Purely for FLAGGING;
-  # nothing is ever removed automatically.
+  # These hard anatomical sanity bounds apply to the hippocampal anchor pair.
+  # Other protocol ROIs are required to be present and non-empty; cohort-level
+  # distribution checks are handled separately and never auto-delete a scan.
   min_hippocampus_volume_mm3: 1000.0
   max_hippocampus_volume_mm3: 7000.0
   min_hippocampus_voxels: 500
-  # |(L-R)/(L+R)| above this is flagged as suspicious lateralisation.
   max_absolute_volume_asymmetry: 0.20
 
   outliers:
-    # "mad"  -> robust z-score, z = 0.6745 * (x - median) / MAD
-    # "iqr"  -> x < Q1 - k*IQR or x > Q3 + k*IQR
-    # "none" -> disable cohort-relative outlier flagging
     method: mad
-    threshold: 3.5      # robust z threshold (mad) or IQR multiplier (iqr)
+    threshold: 3.5
     iqr_multiplier: 1.5
-    # Cohort statistics are meaningless on a handful of sessions; below this
-    # count the flagging step is skipped and reported as "insufficient_samples".
     min_samples: 8
     columns:
       - left_volume_mm3
@@ -102,9 +106,7 @@ quality_control:
       - total_volume_mm3
       - volume_asymmetry
 
-# --- Longitudinal ----------------------------------------------------------
 longitudinal:
-  # "consecutive" -> t(i) vs t(i+1);  "baseline" -> t(0) vs t(i)
   delta_comparisons: [consecutive, baseline]
   min_sessions_for_slope: 2
   days_per_year: 365.25

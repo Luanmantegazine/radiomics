@@ -1,10 +1,8 @@
-"""Thin, configuration-driven wrapper around PyRadiomics.
+"""Configuration-driven, protocol-locked wrapper around PyRadiomics.
 
-Everything methodological (bin width, normalisation, feature classes, image
-types) comes from :class:`~oasis_radiomics.config.PipelineConfig`; this module
-only translates that configuration into a
-``radiomics.featureextractor.RadiomicsFeatureExtractor`` and turns its output
-into plain Python dictionaries.
+Acquisition runs use a frozen 107-feature Original-image signature per ROI.
+The explicit names live in :mod:`oasis_radiomics.protocol`, so upgrading a
+library or changing defaults cannot silently change the dataset schema.
 
 Environment note
 ----------------
@@ -19,6 +17,11 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from .config import PipelineConfig
+from .protocol import (
+    EXPECTED_FEATURES_BY_CLASS,
+    EXPECTED_FEATURE_COUNT,
+    validate_extracted_features,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +29,16 @@ DIAGNOSTICS_PREFIX = "diagnostics_"
 
 
 class ExtractionError(RuntimeError):
-    """Raised when PyRadiomics fails on a given image/mask pair."""
+    """Raised when PyRadiomics fails or its output violates the frozen protocol."""
 
 
 def build_extractor(config: PipelineConfig):
-    """Instantiate a PyRadiomics extractor from ``config``.
+    """Instantiate the protocol-locked PyRadiomics extractor.
 
-    Only the feature classes and image types listed in the configuration are
-    enabled; PyRadiomics' own defaults are switched off first so a run never
-    silently picks up features nobody asked for.
+    The final acquisition protocol intentionally accepts only the ``Original``
+    image type and the seven feature classes frozen in ``protocol.py``.  Every
+    individual feature is enabled by name rather than relying on PyRadiomics
+    class defaults.
     """
     try:
         from radiomics import featureextractor
@@ -44,21 +48,33 @@ def build_extractor(config: PipelineConfig):
             "'pip install -r requirements.txt'."
         ) from exc
 
+    expected_classes = tuple(EXPECTED_FEATURES_BY_CLASS)
+    if tuple(config.feature_classes) != expected_classes:
+        raise ExtractionError(
+            "The acquisition protocol requires feature classes "
+            f"{expected_classes}, got {tuple(config.feature_classes)}."
+        )
+    if set(config.image_types) != {"Original"}:
+        raise ExtractionError(
+            "The acquisition protocol is frozen to the Original image type only; "
+            f"configured image types are {sorted(config.image_types)}."
+        )
+
     settings = dict(config.radiomics)
     extractor = featureextractor.RadiomicsFeatureExtractor(**settings)
 
     extractor.disableAllFeatures()
-    for feature_class in config.feature_classes:
-        extractor.enableFeatureClassByName(feature_class)
+    extractor.enableFeaturesByName(
+        **{name: list(features) for name, features in EXPECTED_FEATURES_BY_CLASS.items()}
+    )
 
     extractor.disableAllImageTypes()
-    for image_type, kwargs in config.image_types.items():
-        extractor.enableImageTypeByName(image_type, customArgs=dict(kwargs) or None)
+    extractor.enableImageTypeByName("Original")
 
     logger.info(
-        "PyRadiomics extractor ready (image types: %s; feature classes: %s)",
-        ", ".join(config.image_types),
-        ", ".join(config.feature_classes),
+        "PyRadiomics extractor ready: Original image, %d frozen features/ROI (%s)",
+        EXPECTED_FEATURE_COUNT,
+        ", ".join(f"{name}={len(features)}" for name, features in EXPECTED_FEATURES_BY_CLASS.items()),
     )
     logger.debug("PyRadiomics settings: %s", settings)
     return extractor
@@ -70,23 +86,7 @@ def extract_roi_features(
     mask_path: Path,
     keep_diagnostics: bool = False,
 ) -> dict[str, Any]:
-    """Run PyRadiomics on one image/mask pair and return plain Python values.
-
-    Parameters
-    ----------
-    extractor:
-        The object returned by :func:`build_extractor`.
-    image_path, mask_path:
-        NIfTI files sharing the same geometry.
-    keep_diagnostics:
-        Keep PyRadiomics' ``diagnostics_*`` entries. They are dropped by default
-        because they are provenance strings, not features.
-
-    Raises
-    ------
-    ExtractionError
-        Wrapping any failure reported by PyRadiomics, with the offending paths.
-    """
+    """Run PyRadiomics and require the frozen 107-feature output signature."""
     try:
         result = extractor.execute(str(image_path), str(mask_path))
     except Exception as exc:
@@ -103,6 +103,13 @@ def extract_roi_features(
     if not features:
         raise ExtractionError(f"PyRadiomics returned no features for mask {mask_path}.")
 
+    if not keep_diagnostics:
+        try:
+            validate_extracted_features(features)
+        except RuntimeError as exc:
+            raise ExtractionError(str(exc)) from exc
+
+    logger.debug("Validated %d radiomic features for %s", EXPECTED_FEATURE_COUNT, mask_path)
     return features
 
 
