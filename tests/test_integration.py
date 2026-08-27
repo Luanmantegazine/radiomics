@@ -22,13 +22,12 @@ from oasis_radiomics.pipeline import (
     WIDE_CSV,
     run_pipeline,
 )
+from oasis_radiomics.protocol import ALZHEIMER_ROIS, EXPECTED_FEATURE_COUNT
 from oasis_radiomics.tables import read_csv_rows
 
 from .conftest import PILOT_SESSIONS, SMOKETEST_FREESURFER_DIR, requires_local_data
 
 pytestmark = requires_local_data
-
-EXPECTED_FEATURES_PER_ROI = 107
 
 
 @pytest.fixture(scope="module")
@@ -60,28 +59,27 @@ def test_all_expected_outputs_exist(outputs: dict[str, Path]) -> None:
     assert outputs["quality_control"].name == QC_CSV
 
 
-def test_long_table_has_two_rois_per_session(outputs: dict[str, Path]) -> None:
+def test_long_table_has_all_protocol_rois_per_session(outputs: dict[str, Path]) -> None:
     rows = read_csv_rows(outputs["features_long"])
-    assert len(rows) == 2 * len(PILOT_SESSIONS)
-    assert {row["roi"] for row in rows} == {"left_hippocampus", "right_hippocampus"}
+    assert len(rows) == len(ALZHEIMER_ROIS) * len(PILOT_SESSIONS)
+    assert {row["roi"] for row in rows} == set(ALZHEIMER_ROIS)
     assert {row["session_id"] for row in rows} == set(PILOT_SESSIONS)
     assert {row["subject_id"] for row in rows} == {"OAS30001"}
 
 
 def test_no_bilateral_union_roi_is_extracted(outputs: dict[str, Path]) -> None:
-    """The disconnected union mask must never reach PyRadiomics by default."""
     rows = read_csv_rows(outputs["features_long"])
     assert all("bilateral" not in str(row["roi"]) for row in rows)
 
 
 def test_expected_feature_count(outputs: dict[str, Path]) -> None:
-    row = read_csv_rows(outputs["features_long"])[0]
-    features = [key for key in row if key.startswith("original_")]
-    assert len(features) == EXPECTED_FEATURES_PER_ROI
+    for row in read_csv_rows(outputs["features_long"]):
+        features = [key for key in row if key.startswith("original_")]
+        assert len(features) == EXPECTED_FEATURE_COUNT
 
 
 def test_mask_voxel_counts_are_stable(outputs: dict[str, Path]) -> None:
-    """Guards the aseg label mapping against silent regressions."""
+    """Guards the hippocampal FreeSurfer label mapping against regressions."""
     rows = {(row["session_id"], row["roi"]): row for row in read_csv_rows(outputs["features_long"])}
     assert rows[("OAS30001_MR_d0129", "left_hippocampus")]["mask_voxels"] == 3931
     assert rows[("OAS30001_MR_d0129", "right_hippocampus")]["mask_voxels"] == 4026
@@ -96,13 +94,15 @@ def test_wide_table_is_one_row_per_session_ordered_in_time(outputs: dict[str, Pa
     assert [row["session_id"] for row in rows] == list(PILOT_SESSIONS)
 
 
-def test_wide_table_carries_the_derived_columns(outputs: dict[str, Path]) -> None:
+def test_wide_table_carries_hippocampal_derived_columns_and_other_rois(outputs: dict[str, Path]) -> None:
     row = read_csv_rows(outputs["features_wide"])[0]
     for suffix in ("_left", "_right", "_mean", "_asymmetry"):
         assert f"original_glcm_Contrast{suffix}" in row
     assert "original_shape_MeshVolume_total" in row
     assert HIPPOCAMPAL_VOLUME_TOTAL in row
     assert row[HIPPOCAMPAL_VOLUME_TOTAL] == pytest.approx(3931 + 4026)
+    assert "original_glcm_Contrast_left_entorhinal" in row
+    assert "original_glcm_Contrast_right_precuneus" in row
 
 
 def test_wide_mean_and_asymmetry_are_consistent(outputs: dict[str, Path]) -> None:
@@ -177,7 +177,7 @@ def test_run_metadata_records_the_environment(outputs: dict[str, Path]) -> None:
     metadata = json.loads(outputs["run_metadata"].read_text())
     assert metadata["counts"]["subjects"] == 1
     assert metadata["counts"]["sessions"] == 2
-    assert metadata["counts"]["features_per_roi"] == EXPECTED_FEATURES_PER_ROI
+    assert metadata["counts"]["features_per_roi"] == EXPECTED_FEATURE_COUNT
     assert metadata["counts"]["failed_sessions"] == []
     assert metadata["environment"]["numpy"].startswith("1.26")
     assert "pyradiomics" in metadata["environment"]
