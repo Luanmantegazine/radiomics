@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from oasis_radiomics.config import ConfigError, PipelineConfig
+from oasis_radiomics.protocol import ALZHEIMER_ROIS
 
 
 def test_repository_config_loads(config: PipelineConfig) -> None:
@@ -19,11 +20,11 @@ def test_repository_config_loads(config: PipelineConfig) -> None:
         "gldm",
         "ngtdm",
     )
-    assert config.roi_labels == {"left_hippocampus": (17,), "right_hippocampus": (53,)}
+    assert config.roi_labels == ALZHEIMER_ROIS
 
 
 def test_wavelet_and_log_are_disabled_by_default(config: PipelineConfig) -> None:
-    """They multiply the feature count and need their own justification."""
+    """They multiply the feature count and require a separate protocol version."""
     assert set(config.image_types) == {"Original"}
 
 
@@ -95,4 +96,5 @@ def test_to_dict_is_json_serialisable(config: PipelineConfig) -> None:
 
     payload = json.loads(json.dumps(config.to_dict()))
     assert payload["roi_labels"]["left_hippocampus"] == [17]
+    assert payload["roi_labels"]["right_precuneus"] == [2025]
     assert payload["feature_classes"][0] == "firstorder"
