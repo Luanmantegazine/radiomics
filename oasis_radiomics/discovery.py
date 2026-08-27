@@ -1,10 +1,14 @@
-"""Discovery of processed FreeSurfer sessions on disk.
+"""Discovery of acquisition-ready FreeSurfer sessions on disk.
 
-Given the directory the OASIS-3 downloader wrote into, locate every session
-that carries the pair the pipeline needs::
+The final Alzheimer protocol requires the pair::
 
     <session>/mri/T1.mgz
-    <session>/mri/aseg.mgz
+    <session>/mri/aparc+aseg.mgz
+
+``aseg.mgz`` alone is no longer sufficient: hippocampus and amygdala are
+available there, but the cortical Desikan-Killiany ROIs used by this study
+(entorhinal, fusiform, temporal, parahippocampal and precuneus) require
+``aparc+aseg.mgz``.
 
 No data is downloaded here; see :mod:`oasis_radiomics.download_oasis`.
 """
@@ -17,20 +21,21 @@ from pathlib import Path
 from typing import Sequence
 
 from .ids import SessionIdError, SessionKey, find_session_id, group_by_subject, parse_session_id
+from .protocol import REQUIRED_SEGMENTATION_FILENAME
 
 logger = logging.getLogger(__name__)
 
 T1_FILENAME = "T1.mgz"
-ASEG_FILENAME = "aseg.mgz"
+ASEG_FILENAME = REQUIRED_SEGMENTATION_FILENAME  # compatibility name used by the package
 
 
 class DiscoveryError(RuntimeError):
-    """Raised when the input directory contains no usable session."""
+    """Raised when the input directory contains no acquisition-ready session."""
 
 
 @dataclass(frozen=True)
 class DiscoveredSession:
-    """A FreeSurfer session that has both the image and the segmentation."""
+    """A FreeSurfer session with the image and final-protocol segmentation."""
 
     key: SessionKey
     t1_path: Path
@@ -48,45 +53,30 @@ class DiscoveredSession:
     def days_from_reference(self) -> int:
         return self.key.days_from_reference
 
+    @property
+    def segmentation_path(self) -> Path:
+        """Semantic alias for the historical ``aseg_path`` field."""
+        return self.aseg_path
 
-def infer_session_id(aseg_path: Path) -> str:
-    """Derive the OASIS session id from the path of an ``aseg.mgz``.
 
-    The FreeSurfer layout is ``<session>/mri/aseg.mgz``, but OASIS downloads
-    sometimes nest that under an extra directory level, so every path component
-    is searched from the deepest one outwards.
-
-    Raises
-    ------
-    SessionIdError
-        If no component of the path carries an OASIS identifier.
-    """
-    for part in reversed(aseg_path.resolve().parts):
+def infer_session_id(segmentation_path: Path) -> str:
+    """Derive the OASIS session id from a FreeSurfer segmentation path."""
+    for part in reversed(segmentation_path.resolve().parts):
         session_id = find_session_id(part)
         if session_id is not None:
             return session_id
 
     raise SessionIdError(
-        f"No OASIS session identifier found in path {aseg_path}. "
+        f"No OASIS session identifier found in path {segmentation_path}. "
         "Expected a component such as 'OAS30001_MR_d0129'."
     )
 
 
 def discover_sessions(input_dir: Path, strict: bool = False) -> list[DiscoveredSession]:
-    """Find every usable FreeSurfer session under ``input_dir``.
+    """Find every session satisfying the frozen acquisition file contract.
 
-    Parameters
-    ----------
-    input_dir:
-        Directory to search recursively (e.g. ``<out>/freesurfer``).
-    strict:
-        When ``True``, a session whose identifier cannot be parsed raises
-        instead of being skipped.
-
-    Returns
-    -------
-    list[DiscoveredSession]
-        Sorted by subject and then chronologically.
+    Sessions that contain only ``aseg.mgz`` are intentionally ignored because
+    they cannot supply all 16 protocol ROIs.
     """
     input_dir = Path(input_dir)
     if not input_dir.is_dir():
@@ -123,10 +113,12 @@ def discover_sessions(input_dir: Path, strict: bool = False) -> list[DiscoveredS
 
     sessions.sort(key=lambda session: session.key)
     logger.info(
-        "Discovered %d FreeSurfer session(s) for %d subject(s) under %s",
+        "Discovered %d acquisition-ready session(s) for %d subject(s) under %s "
+        "(required segmentation: %s)",
         len(sessions),
         len({session.subject_id for session in sessions}),
         input_dir,
+        ASEG_FILENAME,
     )
     return sessions
 
