@@ -12,7 +12,7 @@ For longitudinal inclusion, the acquisition manifest requires at least **two pro
 
 If the approved study design defines a final target of `N` participants, the downloader manifest may include an additional acquisition margin (default 20%) to compensate for unavailable files and QC losses. This margin does not alter the target sample size and must not be reported as a power calculation.
 
-## 2. Required OASIS-3 files
+## 2. Required OASIS-3 files and processing cohort
 
 Every session used by the final protocol must contain:
 
@@ -24,6 +24,18 @@ mri/aparc+aseg.mgz
 `aseg.mgz` alone is insufficient for the final study because the protocol includes cortical Desikan-Killiany labels in addition to subcortical structures.
 
 No new FreeSurfer reconstruction is performed. The study consumes the processed FreeSurfer products distributed with OASIS-3.
+
+### 2.1 FreeSurfer 5.3 / 3T restriction
+
+Protocol v1.0 defaults to identifiers containing:
+
+```text
+_Freesurfer53_
+```
+
+OASIS-3 documents two relevant processing regimes: 1.5T MRI was reprocessed with FreeSurfer 5.0/5.1, while 3.0T MRI was reprocessed with FreeSurfer 5.3-HCP-patch. The final raw radiomics cohort is therefore restricted to `Freesurfer53` sessions so the acquisition does not intentionally mix the 1.5T/FS5.0–5.1 and 3T/FS5.3 regimes.
+
+`prepare_acquisition.py` enforces version `53` by default. Changing this filter creates a different acquisition protocol and must be documented/versioned.
 
 ## 3. Regions of interest
 
@@ -104,9 +116,10 @@ Acquire **10–20 longitudinal participants** first. The purpose is operational 
 
 - confirm `aparc+aseg.mgz` availability;
 - confirm all 16 masks are present;
+- confirm the selected sessions are `Freesurfer53`;
 - measure extraction time/storage requirements;
 - inspect QC distributions;
-- verify the exact 107-feature schema across subjects/scanners.
+- verify the exact 107-feature schema across participants.
 
 No protocol parameter should be changed after this phase without incrementing the protocol version.
 
@@ -121,6 +134,7 @@ Build the participant list from the complete authorized OASIS-3 FreeSurfer catal
 ```bash
 python prepare_acquisition.py \
   --catalog oasis3_freesurfer_catalog.csv \
+  --freesurfer-version 53 \
   --min-sessions 2 \
   --target-subjects <N_DO_PROJETO> \
   --oversample 1.20 \
@@ -128,7 +142,7 @@ python prepare_acquisition.py \
   --output acquisition/
 ```
 
-For all longitudinally eligible participants, omit `--target-subjects`.
+For all longitudinally eligible `Freesurfer53` participants, omit `--target-subjects`.
 
 ### Download selected FreeSurfer outputs
 
@@ -162,6 +176,7 @@ Acquisition is considered structurally complete only when this command returns e
 
 A session passes the acquisition gate when:
 
+- it belongs to the frozen `Freesurfer53` acquisition cohort;
 - `T1.mgz` and `aparc+aseg.mgz` are available;
 - all 16 protocol ROIs produce one and only one row;
 - every ROI contains all 107 expected features;
@@ -202,6 +217,7 @@ NumPy 2.x is not permitted in protocol v1.0 because NumPy 2.0.1 produced a segme
 
 Once definitive acquisition begins, changes to any of the following require a protocol version increment and complete cohort re-extraction:
 
+- field-strength/FreeSurfer processing cohort;
 - FreeSurfer segmentation source;
 - ROI list/labels;
 - image normalization;
