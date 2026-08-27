@@ -17,11 +17,11 @@ PILOT_SESSIONS = ("OAS30001_MR_d0129", "OAS30001_MR_d0757")
 
 
 def local_data_available() -> bool:
-    """Whether both pilot sessions are present with T1 and aseg."""
+    """Whether both pilot sessions satisfy the final acquisition file contract."""
     return all(
         (SMOKETEST_FREESURFER_DIR / session / "mri" / name).exists()
         for session in PILOT_SESSIONS
-        for name in ("T1.mgz", "aseg.mgz")
+        for name in ("T1.mgz", "aparc+aseg.mgz")
     )
 
 
@@ -50,7 +50,7 @@ def config():
 
 @pytest.fixture
 def long_rows() -> list[dict]:
-    """A synthetic long table: one subject, three visits, two ROIs."""
+    """A synthetic long table: one subject, three visits, two hippocampal ROIs."""
     rows = []
     for session_index, (days, left, right) in enumerate(
         [(129, 4000.0, 4200.0), (757, 3900.0, 4100.0), (1400, 3800.0, 4000.0)]
