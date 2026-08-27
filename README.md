@@ -1,154 +1,320 @@
-# OASIS-3 Longitudinal Hippocampal Radiomics
+# OASIS-3 Alzheimer Radiomics Acquisition
 
-Pipeline that turns the FreeSurfer outputs shipped with OASIS-3 into a
-**longitudinal** radiomic dataset: one row per subject/session, plus per-subject
-deltas and annualised slopes, ready for later work on CN → MCI → AD progression.
+Reproducible pipeline for acquiring **already processed FreeSurfer outputs from OASIS-3** and transforming structural T1 MRI into a longitudinal radiomics dataset.
 
+This repository currently stops at **data acquisition, ROI extraction, radiomic feature extraction, longitudinal tabulation and quality control**. No machine learning, feature selection, SMOTE, ComBat or predictive modelling is part of the acquisition stage.
+
+## Frozen acquisition protocol
+
+Protocol identifier:
+
+```text
+OASIS3-AD-RADIOMICS-v1.0
 ```
+
+Pipeline:
+
+```text
 OASIS-3 / NITRC-IR
-      ↓  (FreeSurfer already processed by OASIS-3)
-T1.mgz + aseg.mgz
-      ↓  labels 17 / 53
-left + right hippocampus masks   ← always separate, never a union mask
-      ↓  NIfTI
-PyRadiomics (107 Original-image features per side)
-      ↓
-radiomics_features_long.csv        (subject × session × ROI)
-      ↓  bilateral derivation
-radiomics_features_wide.csv        (subject × session; _left/_right/_mean/_total/_asymmetry)
-      ↓  temporal ordering
-radiomics_longitudinal_deltas.csv  (Δ and Δ/year between visits)
-radiomics_longitudinal_slopes.csv  (OLS slope, intercept, r², per subject × feature)
+        ↓
+FreeSurfer outputs already supplied by OASIS-3
+        ↓
+T1.mgz + aparc+aseg.mgz
+        ↓
+16 Alzheimer-related ROIs
+        ↓
+Original T1 + PyRadiomics 3.0.1
+        ↓
+107 frozen radiomic features / ROI
+        ↓
+16 × 107 = 1,712 raw radiomic features / session
+        ↓
+radiomics_features_long.csv
+        ↓
+QC + acquisition validation gate
+        ↓
+longitudinal wide / delta / slope tables
 ```
 
-> **Status.** This is research *infrastructure*, not a finished protocol. No
-> machine learning, feature selection, harmonisation (ComBat) or scanner
-> correction is implemented — those come later, once the dataset itself is
-> trustworthy. Every open methodological question is marked
-> `TODO: methodological decision required` in `radiomics_config.yaml`.
+The frozen constants and exact feature names are in [`oasis_radiomics/protocol.py`](oasis_radiomics/protocol.py).
 
-## Install
+## Why 107 features instead of the 104 written in the preliminary project?
+
+The preliminary methodology estimated:
+
+```text
+18 first-order
+14 shape
+21 GLCM
+16 GLRLM
+16 GLSZM
+14 GLDM
+5 NGTDM
+----------------
+104 / ROI
+```
+
+The validated environment actually returns **24 non-deprecated GLCM features** with PyRadiomics 3.0.1, giving:
+
+```text
+18 first-order
+14 shape
+24 GLCM
+16 GLRLM
+16 GLSZM
+14 GLDM
+5 NGTDM
+----------------
+107 / ROI
+```
+
+The acquisition protocol therefore records a methodological amendment rather than deleting three valid GLCM measurements only to preserve the old arithmetic. The exact 107 names are explicitly enabled and every ROI is checked against that schema. A library upgrade cannot silently change the dataset.
+
+With 16 ROIs, the raw per-session count is consequently:
+
+```text
+16 × 107 = 1,712 radiomic features
+```
+
+Derived left/right means, totals, asymmetry indices, deltas and slopes are **derived variables** and are not counted as additional raw PyRadiomics features.
+
+## Alzheimer ROIs
+
+Eight bilateral anatomical regions are extracted from `aparc+aseg.mgz`:
+
+| Region | Left label | Right label |
+|---|---:|---:|
+| Hippocampus | 17 | 53 |
+| Amygdala | 18 | 54 |
+| Entorhinal cortex | 1006 | 2006 |
+| Fusiform | 1007 | 2007 |
+| Inferior temporal | 1009 | 2009 |
+| Middle temporal | 1015 | 2015 |
+| Parahippocampal | 1016 | 2016 |
+| Precuneus | 1025 | 2025 |
+
+Left and right masks are always separate. A disconnected bilateral union mask is never sent to PyRadiomics.
+
+`aparc+aseg.mgz` is mandatory for the final protocol. `aseg.mgz` alone is insufficient because it does not provide the cortical atlas labels required by the study.
+
+## Validated environment
+
+The pilot was validated on macOS ARM64 with:
+
+```text
+Python       3.10.x
+NumPy        1.26.4
+PyRadiomics  3.0.1
+SimpleITK    2.x
+```
+
+### Do not upgrade to NumPy 2.x in this environment
+
+NumPy 2.0.1 + PyRadiomics 3.0.1 produced a segmentation fault during the pilot. Keep `numpy==1.26.4` for this acquisition protocol.
+
+Install with:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install numpy==1.26.4
-pip install --no-build-isolation -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install numpy==1.26.4
+python -m pip install --no-build-isolation -r requirements.txt
 ```
 
-PyRadiomics 3.0.1 imports NumPy in its own `setup.py` without declaring it as a
-build dependency, hence the two-step install with `--no-build-isolation`.
+Conda users can use `environment.yml`.
 
-> ### ⚠️ Do not upgrade to NumPy 2.x
-> NumPy 2.x with PyRadiomics 3.0.1 caused a **segmentation fault** during
-> feature extraction in this project's validated environment. PyRadiomics 3.0.1
-> is compiled against the NumPy 1.x C ABI. Keep `numpy==1.26.4`.
+## Final acquisition workflow
 
-Conda users: `conda env create -f environment.yml`.
+### 1. Obtain a FreeSurfer catalogue
 
-## Usage
+From the authorized OASIS-3/NITRC environment, obtain/export a CSV containing the available processed FreeSurfer identifiers. The only required column for cohort preparation is:
+
+```csv
+freesurfer_id
+OAS30001_Freesurfer53_d0129
+OAS30001_Freesurfer53_d0757
+...
+```
+
+Do not commit credentialed OASIS-3 data or metadata that is restricted by the data-use agreement.
+
+### 2. Build a longitudinal acquisition manifest
+
+The selection unit is the **participant**, not the MRI session.
+
+For the full eligible longitudinal cohort:
 
 ```bash
-# full pipeline: extraction + longitudinal derivation + provenance
-python cli.py run --input oasis3_radiomics_smoketest/freesurfer --output results/
-
-# stages individually
-python cli.py extract      --input oasis3_radiomics_smoketest/freesurfer --output results/
-python cli.py longitudinal --features results/radiomics_features_long.csv --output results/
-python cli.py qc           --input oasis3_radiomics_smoketest/freesurfer --output results/
-
-# download (explicit only — nothing is ever fetched automatically)
-python cli.py download --ids freesurfer_ids.csv --nitrc-user <your-nitrc-user>
+python prepare_acquisition.py \
+  --catalog oasis3_freesurfer_catalog.csv \
+  --min-sessions 2 \
+  --output acquisition/
 ```
 
-Global options: `--config <path>`, `--log-level {DEBUG,INFO,WARNING,ERROR}`,
-`--log-file <path>`.
-
-The original entry point still works unchanged:
+If the study protocol defines a final participant target `N`, acquire with a QC/file-attrition margin:
 
 ```bash
-python oasis3_segmented_to_radiomics.py --skip-download
+python prepare_acquisition.py \
+  --catalog oasis3_freesurfer_catalog.csv \
+  --min-sessions 2 \
+  --target-subjects <N_DO_PROJETO> \
+  --oversample 1.20 \
+  --seed 2026 \
+  --output acquisition/
 ```
 
-It now delegates to the package and writes the same
-`oasis3_radiomics_smoketest/radiomics_features.csv`.
+This writes:
+
+```text
+acquisition/acquisition_freesurfer_ids.csv
+acquisition/acquisition_subjects.csv
+```
+
+The 20% margin is only an acquisition buffer for missing files and QC attrition. It is **not** a replacement for a formal sample-size calculation.
+
+### 3. Download only the selected processed sessions
+
+```bash
+python cli.py download \
+  --ids acquisition/acquisition_freesurfer_ids.csv \
+  --nitrc-user luanmantegazine \
+  --output oasis3_data/
+```
+
+The password is requested by the official OASIS/NITRC downloader and is not stored by this project.
+
+### 4. Run extraction + longitudinal tables + QC
+
+```bash
+python cli.py run \
+  --input oasis3_data/freesurfer \
+  --output results/ \
+  --config radiomics_config.yaml
+```
+
+For a small validation batch first:
+
+```bash
+python cli.py run \
+  --input oasis3_data/freesurfer \
+  --output results_pilot/ \
+  --config radiomics_config.yaml \
+  --max-sessions 20
+```
+
+### 5. Run the acquisition gate
+
+A run is not considered an acquisition success merely because PyRadiomics finished. It must pass:
+
+```bash
+python validate_acquisition.py \
+  --features results/radiomics_features_long.csv \
+  --output results/acquisition_validation.json
+```
+
+A valid session must contain:
+
+```text
+16/16 expected ROIs
+107/107 expected radiomic features in every ROI
+no duplicated ROI rows
+no unexpected radiomic columns
+no non-finite radiomic values
+```
+
+The command exits with a non-zero status when any session violates the contract.
+
+## Recommended staged acquisition
+
+Do not begin by downloading the entire database blindly.
+
+```text
+Stage A — existing smoke test
+1 participant / 2 sessions
+purpose: image → segmentation → ROI → PyRadiomics
+
+Stage B — protocol pilot
+10–20 participants with ≥2 sessions
+purpose: validate all 16 ROIs, schema stability, storage/time and QC
+
+Stage C — definitive acquisition
+N defined by the study + acquisition margin
+purpose: produce the frozen raw longitudinal radiomics dataset
+```
+
+After Stage B passes the acquisition gate, the protocol should not change during Stage C. Any change to ROI labels, bin width, normalization, image type or feature list requires a new protocol version and complete re-extraction.
 
 ## Outputs
 
 | File | Grain | Contents |
 |---|---|---|
-| `radiomics_features_long.csv` | subject × session × ROI | raw PyRadiomics output, one row per hemisphere |
-| `radiomics_features_wide.csv` | subject × session | `_left`, `_right`, `_mean`, `_total`, `_asymmetry` |
-| `radiomics_longitudinal_deltas.csv` | subject × visit pair | `delta_<f>`, `slope_<f>` (per year), `delta_days`, `delta_years` |
-| `radiomics_longitudinal_slopes.csv` | subject × feature | `feature_slope`, `feature_intercept`, `feature_r2`, `n_sessions`, `followup_years` |
-| `quality_control.csv` | subject × session | voxel counts, volumes, `qc_status`, `qc_warning`, `qc_outlier` |
-| `run_metadata.json` | run | timestamp, all library versions, resolved config, counts |
+| `radiomics_features_long.csv` | subject × session × ROI | 107 raw PyRadiomics features per ROI |
+| `radiomics_features_wide.csv` | subject × session | side-specific/derived columns plus other ROI features |
+| `radiomics_longitudinal_deltas.csv` | subject × visit pair | absolute and annualized changes |
+| `radiomics_longitudinal_slopes.csv` | subject × feature | OLS longitudinal slope/intercept/r² |
+| `quality_control.csv` | subject × session | anatomical/geometry QC flags |
+| `run_metadata.json` | run | environment, resolved config and counts |
+| `acquisition_validation.json` | acquisition gate | session-level schema/completeness failures |
 
-## Design decisions worth knowing
+## Bilateral handling
 
-**No radiomics on a bilateral union mask.** `Left-Hippocampus ∪
-Right-Hippocampus` is two spatially disconnected objects. Shape features
-(sphericity, surface-to-volume ratio, axis lengths, mesh volume) computed on
-such a mask describe a nonexistent structure. Left and right are extracted
-separately and bilateral quantities are derived *tabularly*:
+The two hippocampi are never merged before feature extraction. For the paired hippocampal variables, derived values are computed tabularly:
 
-```
+```text
 mean      = (left + right) / 2
-total     = left + right            # only for additive features (volume, surface area)
+total     = left + right       # only physically additive variables
 asymmetry = (left - right) / (left + right)
 ```
 
-The legacy behaviour is still reachable via
-`python oasis3_segmented_to_radiomics.py --legacy-bilateral` or
-`bilateral.extract_union_mask: true`, but it is off by default.
+Signed variables use the conservative `positive_only` asymmetry mode by default.
 
-**Asymmetry of signed features is NaN.** The normalised difference is only
-interpretable for strictly positive quantities: for signed features such as
-`firstorder_Skewness`, `glcm_ClusterShade` or `glcm_Imc1` the denominator
-collapses near zero and the index can even invert its sign. Under the default
-`asymmetry_mode: positive_only` these get NaN rather than a plausible-looking
-number. `always` restores the naive behaviour.
+## Longitudinal handling
 
-**Slopes use every timepoint.** With more than two visits,
-`(last - first) / span` throws away the middle. `radiomics_longitudinal_slopes.csv`
-fits `feature = β₀ + β₁·years` by least squares (`scipy.stats.linregress`) and
-reports `r²` so a non-linear trajectory is visible. With exactly two visits the
-fit is exact and reduces to the annualised delta, which keeps a two-session
-pilot comparable with later multi-visit runs.
+Session time is parsed from identifiers such as:
 
-**QC flags, never filters.** Sessions are annotated with `qc_status`,
-`qc_warning` and `qc_outlier` (robust MAD z-score or IQR). Nothing is removed
-automatically — excluding a subject is a scientific decision. Cohort-relative
-outlier detection is skipped below `min_samples` sessions and says so
-(`insufficient_samples(n=2, required=8)`) so a small pilot is never mistaken for
-a clean cohort.
+```text
+OAS30001_MR_d0129 → subject OAS30001, day 129
+OAS30001_MR_d0757 → subject OAS30001, day 757
+```
 
-**No automatic downloads.** `extract`, `run`, `qc` and `longitudinal` operate
-exclusively on data already on disk. Only `cli.py download` contacts NITRC-IR,
-and only when invoked explicitly with `--nitrc-user`.
+For two visits, the pipeline calculates delta and annualized rate. For three or more visits it also fits:
+
+```text
+feature = beta0 + beta1 × years
+```
+
+using all available timepoints and reports slope, intercept and r².
+
+## Quality-control policy
+
+QC **flags and reports**; it does not silently delete participants. The final investigator-facing cohort must preserve the reason for every exclusion.
+
+The acquisition gate is stricter than the anatomical QC table: it guarantees the raw data matrix has the exact protocol structure before the acquisition phase is declared complete.
 
 ## Repository layout
 
-```
+```text
 oasis_radiomics/
-├── config.py               typed config, loaded from radiomics_config.yaml
-├── ids.py                  subject / session / days parsing and grouping
-├── discovery.py            find T1.mgz + aseg.mgz on disk
-├── masks.py                aseg labels 17 / 53 → binary masks → NIfTI
-├── radiomics_extractor.py  PyRadiomics wrapper
-├── quality_control.py      per-session checks + robust outlier flagging
-├── longitudinal.py         wide table, bilateral derivation, deltas, slopes
-├── download_oasis.py       official NrgXnat/oasis-scripts wrapper
-├── metadata.py             run_metadata.json
-├── tables.py               CSV IO with a stable column order
-├── logging_setup.py        logging configuration
-├── pipeline.py             stage orchestration
-└── cli.py                  command line interface
-```
+├── acquisition.py          cohort manifest + final acquisition validator
+├── protocol.py             frozen 16-ROI / 107-feature contract
+├── config.py
+├── discovery.py            requires T1.mgz + aparc+aseg.mgz
+├── download_oasis.py
+├── ids.py
+├── masks.py
+├── radiomics_extractor.py  explicit feature-name extraction
+├── quality_control.py
+├── longitudinal.py
+├── metadata.py
+├── tables.py
+└── pipeline.py
 
-The package is deliberately **not** called `radiomics`: that name belongs to
-PyRadiomics, and a local package with the same name shadows it whenever the
-repository root lands on `sys.path`.
+prepare_acquisition.py      catalogue → reproducible download manifest
+validate_acquisition.py     final 16 × 107 acquisition gate
+radiomics_config.yaml       frozen acquisition settings
+ACQUISITION_PROTOCOL.md     methodological protocol/checklist
+```
 
 ## Tests
 
@@ -156,34 +322,8 @@ repository root lands on `sys.path`.
 pytest -q
 ```
 
-Unit tests are pure-Python and always run. `tests/test_integration.py` exercises
-the full pipeline on the two pilot sessions (`OAS30001_MR_d0129`,
-`OAS30001_MR_d0757`) and **skips itself** when the data is absent — OASIS-3 is
-credentialed and is not distributed with this repository.
+Pure-Python tests run without OASIS data. The integration test uses the two pilot sessions when they are present locally and otherwise skips itself.
 
-## Data
+## Data governance
 
-**No OASIS-3 data is tracked in this repository.** OASIS-3 is credentialed: it
-requires an account on [nitrc.org](https://www.nitrc.org/) /
-[oasis-brains.org](https://www.oasis-brains.org/), and its imaging data must not
-be redistributed. A fresh clone therefore contains code only — fetch the
-sessions yourself:
-
-```bash
-# the two pilot sessions used by the integration test
-python cli.py download --ids freesurfer_ids.csv --nitrc-user <your-nitrc-user>
-```
-
-This writes `oasis3_radiomics_smoketest/freesurfer/<session>/mri/{T1.mgz,aseg.mgz}`,
-which is what `--input` expects. `.gitignore` blocks `*.mgz`, `*.nii`, `*.nii.gz`,
-the download directories and the `results/` outputs, so re-downloading never
-dirties the working tree.
-
-Until the data is present, `tests/test_integration.py` skips itself and the
-remaining unit tests still run.
-
-> **History note.** The FreeSurfer outputs were tracked in the initial commit and
-> were later removed from tracking. Removing them stops *future* clones from
-> growing, but the blobs remain reachable in the existing history — purging them
-> for good needs a history rewrite (`git filter-repo` / BFG) and a force-push,
-> which is a separate, coordinated operation.
+No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
