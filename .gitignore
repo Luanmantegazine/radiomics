@@ -4,12 +4,18 @@
 *.mgz
 *.nii
 *.nii.gz
+
 oasis3_radiomics_smoketest/freesurfer/
 oasis3_radiomics_smoketest/prepared_nifti/
 oasis3_radiomics_smoketest/_oasis_scripts/
 
+oasis3_data/
+acquisition/
+oasis3_freesurfer_catalog.csv
+
 # --- pipeline outputs (regenerate with `python cli.py run`) ---------------
 results/
+results_*/
 prepared_nifti/
 *.log
 
