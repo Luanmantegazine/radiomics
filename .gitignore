@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# OASIS-3 data is credentialed and must NEVER be committed to this repository.
+# ---------------------------------------------------------------------------
+*.mgz
+*.nii
+*.nii.gz
+oasis3_radiomics_smoketest/freesurfer/
+oasis3_radiomics_smoketest/prepared_nifti/
+oasis3_radiomics_smoketest/_oasis_scripts/
+
+# --- pipeline outputs (regenerate with `python cli.py run`) ---------------
+results/
+prepared_nifti/
+*.log
+
+# --- python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+.coverage

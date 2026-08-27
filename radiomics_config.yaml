@@ -1,0 +1,110 @@
+# ---------------------------------------------------------------------------
+# OASIS-3 longitudinal hippocampal radiomics - pipeline configuration
+# ---------------------------------------------------------------------------
+# Every methodological knob lives here, never in code. Options marked
+# "TODO: methodological decision required" are placeholders that MUST be
+# discussed and justified before this pipeline is used for a real study.
+# ---------------------------------------------------------------------------
+
+# --- PyRadiomics extractor settings ---------------------------------------
+# Passed verbatim to radiomics.featureextractor.RadiomicsFeatureExtractor.
+radiomics:
+  binWidth: 25              # TODO: methodological decision required (bin width
+                            # drives every texture feature; must be justified
+                            # against ROI size and intensity range).
+  normalize: true           # TODO: methodological decision required.
+  normalizeScale: 100       # TODO: methodological decision required.
+  correctMask: true
+  label: 1
+  enableCExtensions: false  # kept false: matches the validated environment.
+  # resampledPixelSpacing: null
+  #   TODO: methodological decision required. OASIS-3 FreeSurfer conformed
+  #   volumes are already 1x1x1 mm isotropic, so no resampling is applied.
+  #   Any multi-scanner harmonisation strategy (resampling, ComBat, ...) is
+  #   explicitly out of scope for this stage.
+
+# --- Image types -----------------------------------------------------------
+# Wavelet / LoG stay OFF on purpose: enabling them multiplies the feature count
+# and needs its own methodological justification.
+image_types:
+  Original: true
+  # Wavelet: {}   # TODO: methodological decision required
+  # LoG: {sigma: [1.0, 3.0]}  # TODO: methodological decision required
+
+# --- Feature classes -------------------------------------------------------
+features:
+  firstorder: true
+  shape: true
+  glcm: true
+  glrlm: true
+  glszm: true
+  gldm: true
+  ngtdm: true
+
+# --- Regions of interest ---------------------------------------------------
+# FreeSurfer aseg labels. Left and right are ALWAYS extracted separately:
+# a bilateral union mask is two spatially disconnected objects and its shape
+# features are not interpretable.
+rois:
+  left_hippocampus: [17]
+  right_hippocampus: [53]
+
+# --- Bilateral handling ----------------------------------------------------
+bilateral:
+  # Recreate the legacy union mask and run PyRadiomics on it. OFF by default.
+  # Only kept for backwards compatibility with the original smoke test.
+  extract_union_mask: false
+
+  # Left/right pairing used to build derived columns.
+  left_roi: left_hippocampus
+  right_roi: right_hippocampus
+
+  # Features that are physically additive: they get a "_total" column
+  # (left + right) instead of / in addition to "_mean".
+  additive_features:
+    - mask_voxels
+    - mask_volume_mm3
+    - original_shape_MeshVolume
+    - original_shape_VoxelVolume
+    - original_shape_SurfaceArea
+
+  # Asymmetry index: (left - right) / (left + right).
+  # "positive_only": computed only when both sides are strictly positive.
+  #                  Signed features (Skewness, ClusterShade, Imc1, ...) get NaN,
+  #                  because the normalised difference is unstable around zero.
+  # "always":        computed whenever left + right != 0.
+  # TODO: methodological decision required for signed texture features.
+  asymmetry_mode: positive_only
+
+# --- Quality control -------------------------------------------------------
+quality_control:
+  # Hard sanity bounds on a single hippocampus (mm^3). Purely for FLAGGING;
+  # nothing is ever removed automatically.
+  min_hippocampus_volume_mm3: 1000.0
+  max_hippocampus_volume_mm3: 7000.0
+  min_hippocampus_voxels: 500
+  # |(L-R)/(L+R)| above this is flagged as suspicious lateralisation.
+  max_absolute_volume_asymmetry: 0.20
+
+  outliers:
+    # "mad"  -> robust z-score, z = 0.6745 * (x - median) / MAD
+    # "iqr"  -> x < Q1 - k*IQR or x > Q3 + k*IQR
+    # "none" -> disable cohort-relative outlier flagging
+    method: mad
+    threshold: 3.5      # robust z threshold (mad) or IQR multiplier (iqr)
+    iqr_multiplier: 1.5
+    # Cohort statistics are meaningless on a handful of sessions; below this
+    # count the flagging step is skipped and reported as "insufficient_samples".
+    min_samples: 8
+    columns:
+      - left_volume_mm3
+      - right_volume_mm3
+      - total_volume_mm3
+      - volume_asymmetry
+
+# --- Longitudinal ----------------------------------------------------------
+longitudinal:
+  # "consecutive" -> t(i) vs t(i+1);  "baseline" -> t(0) vs t(i)
+  delta_comparisons: [consecutive, baseline]
+  min_sessions_for_slope: 2
+  days_per_year: 365.25
