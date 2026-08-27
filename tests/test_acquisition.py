@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from oasis_radiomics.acquisition import (
     CatalogueSession,
     eligible_subjects,
@@ -10,6 +12,7 @@ from oasis_radiomics.acquisition import (
     validate_long_feature_rows,
 )
 from oasis_radiomics.protocol import ALZHEIMER_ROIS, expected_feature_keys
+from prepare_acquisition import _read_input_catalogue
 
 
 def test_parse_freesurfer_id() -> None:
@@ -17,6 +20,26 @@ def test_parse_freesurfer_id() -> None:
     assert item.subject_id == "OAS30001"
     assert item.days_from_reference == 129
     assert item.freesurfer_version == "53"
+
+
+def test_official_mri_catalogue_is_converted_to_freesurfer53_candidates(tmp_path: Path) -> None:
+    path = tmp_path / "oasis_mri.csv"
+    path.write_text(
+        "Label,Project,Date,Subject,M/F,Age,Type,Scanner,Scans\n"
+        'OAS30001_MR_d0129,OASIS3,,OAS30001,F,65,,3.0T,"T1w(2), T2w(2)"\n'
+        'OAS30001_MR_d0757,OASIS3,,OAS30001,F,67,,3.0T,"T1w(2), dwi(1)"\n'
+        'OAS30002_MR_d0653,OASIS3,,OAS30002,M,68,,1.5T,"T1w(1)"\n'
+        'OAS30003_MR_d0558,OASIS3,,OAS30003,F,60,,3.0T,"T2w(2), bold(3)"\n',
+        encoding="utf-8",
+    )
+
+    sessions, source_format = _read_input_catalogue(path, "53")
+
+    assert source_format == "mri_candidates"
+    assert [item.freesurfer_id for item in sessions] == [
+        "OAS30001_Freesurfer53_d0129",
+        "OAS30001_Freesurfer53_d0757",
+    ]
 
 
 def test_longitudinal_eligibility_and_reproducible_selection() -> None:
