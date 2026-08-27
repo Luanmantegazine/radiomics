@@ -1,4 +1,4 @@
-"""Tests for FreeSurfer session discovery."""
+"""Tests for acquisition-ready FreeSurfer session discovery."""
 
 from __future__ import annotations
 
@@ -18,25 +18,25 @@ from oasis_radiomics.ids import SessionIdError
 def _make_session(root: Path, session_id: str, with_t1: bool = True) -> Path:
     mri = root / session_id / "mri"
     mri.mkdir(parents=True)
-    (mri / "aseg.mgz").write_bytes(b"")
+    (mri / "aparc+aseg.mgz").write_bytes(b"")
     if with_t1:
         (mri / "T1.mgz").write_bytes(b"")
     return mri
 
 
 def test_infer_session_id_from_freesurfer_layout() -> None:
-    path = Path("/data/OAS30001_MR_d0129/mri/aseg.mgz")
+    path = Path("/data/OAS30001_MR_d0129/mri/aparc+aseg.mgz")
     assert infer_session_id(path) == "OAS30001_MR_d0129"
 
 
 def test_infer_session_id_through_extra_nesting() -> None:
-    path = Path("/data/batch1/OAS30001_MR_d0757/some/deeper/mri/aseg.mgz")
+    path = Path("/data/batch1/OAS30001_MR_d0757/some/deeper/mri/aparc+aseg.mgz")
     assert infer_session_id(path) == "OAS30001_MR_d0757"
 
 
 def test_infer_session_id_raises_when_absent(tmp_path: Path) -> None:
     with pytest.raises(SessionIdError):
-        infer_session_id(tmp_path / "anonymous" / "mri" / "aseg.mgz")
+        infer_session_id(tmp_path / "anonymous" / "mri" / "aparc+aseg.mgz")
 
 
 def test_discover_sessions_sorts_chronologically(tmp_path: Path) -> None:
@@ -57,6 +57,14 @@ def test_discover_sessions_skips_missing_t1(tmp_path: Path) -> None:
     assert [session.session_id for session in discover_sessions(tmp_path)] == [
         "OAS30001_MR_d0129"
     ]
+
+
+def test_aseg_only_is_not_acquisition_ready(tmp_path: Path) -> None:
+    mri = tmp_path / "OAS30001_MR_d0129" / "mri"
+    mri.mkdir(parents=True)
+    (mri / "T1.mgz").write_bytes(b"")
+    (mri / "aseg.mgz").write_bytes(b"")
+    assert discover_sessions(tmp_path) == []
 
 
 def test_discover_sessions_skips_unparseable_directories(tmp_path: Path) -> None:
