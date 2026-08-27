@@ -3,6 +3,12 @@
 
 Input: a catalogue CSV exported/listed from OASIS/NITRC with a freesurfer_id column.
 Output: downloader-compatible IDs plus a subject-level audit table.
+
+The final protocol defaults to ``Freesurfer53``. OASIS documents that its 3T MRI
+sessions were reprocessed with FreeSurfer 5.3-HCP-patch, whereas 1.5T sessions
+used FreeSurfer 5.0/5.1. Restricting the acquisition to version 53 therefore
+avoids mixing those processing/field-strength regimes in the raw radiomics
+cohort.
 """
 
 from __future__ import annotations
@@ -24,6 +30,11 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=Path("acquisition"), help="Output directory.")
     parser.add_argument("--min-sessions", type=int, default=2, help="Minimum FreeSurfer visits per subject.")
     parser.add_argument(
+        "--freesurfer-version",
+        default="53",
+        help="Keep only this OASIS FreeSurfer processing version (default 53 = 3T/FS5.3-HCP-patch cohort).",
+    )
+    parser.add_argument(
         "--target-subjects",
         type=int,
         default=None,
@@ -38,7 +49,16 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=2026, help="Reproducible subject sampling seed.")
     args = parser.parse_args()
 
-    catalogue = read_catalogue(args.catalog)
+    all_catalogue = read_catalogue(args.catalog)
+    catalogue = [
+        session for session in all_catalogue
+        if session.freesurfer_version == str(args.freesurfer_version)
+    ]
+    if not catalogue:
+        parser.error(
+            f"No sessions with Freesurfer{args.freesurfer_version} were found in {args.catalog}."
+        )
+
     eligible = eligible_subjects(catalogue, min_sessions=args.min_sessions)
     selected = select_subjects(
         eligible,
@@ -56,7 +76,8 @@ def main() -> int:
     )
 
     n_sessions = sum(len(eligible[subject]) for subject in selected)
-    print(f"Catalogue sessions: {len(catalogue)}")
+    print(f"Catalogue sessions (all versions): {len(all_catalogue)}")
+    print(f"Freesurfer{args.freesurfer_version} sessions: {len(catalogue)}")
     print(f"Longitudinally eligible subjects: {len(eligible)}")
     print(f"Selected subjects: {len(selected)}")
     print(f"Selected sessions: {n_sessions}")
