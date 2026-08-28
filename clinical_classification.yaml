@@ -1,0 +1,84 @@
+# ===========================================================================
+# OASIS-3 clinical classification codebook
+# ===========================================================================
+# This file, and ONLY this file, may assign clinical meaning to the values of
+# the OASIS/NACC UDS variables. No mapping is hard-coded anywhere in Python.
+#
+# ---------------------------------------------------------------------------
+# READ THIS BEFORE SETTING codebook_frozen: true
+# ---------------------------------------------------------------------------
+# The numeric semantics of the D1 diagnosis variables (NORMCOG, DEMENTED,
+# MCIAMEM, PROBAD, ...) are defined by the official NACC UDS Data Element
+# Dictionary / OASIS-3 documentation. That dictionary is NOT part of this
+# repository, so this project does not guess at it.
+#
+# While `codebook_frozen` is false the classifier does NOT derive anything:
+# every visit is reported as
+#     cognitive_status       = UNKNOWN
+#     ad_etiology            = UNKNOWN
+#     classification_status  = unresolved_codebook
+# and every raw D1/B4 variable is still carried through to the output tables,
+# so nothing is lost and no unverified assumption enters the dataset.
+#
+# To activate classification:
+#   1. obtain the official NACC UDS D1 data dictionary;
+#   2. write the rules below, citing the dictionary page for each;
+#   3. set codebook_frozen: true and bump `version`;
+#   4. re-run `python cli.py clinical-link`.
+# ===========================================================================
+
+version: "oasis3-clinical-classification-v0-unfrozen"
+
+# Master switch. false => classifier returns unresolved_codebook for every visit.
+codebook_frozen: false
+
+# ---------------------------------------------------------------------------
+# Rule format
+# ---------------------------------------------------------------------------
+# Each rule is evaluated against one merged clinical visit. A rule fires when
+# EVERY entry of `when` matches the visit's raw value for that variable
+# (compared as trimmed strings; a null in `when` means "value is absent").
+#
+#   - id:               unique, human-readable
+#     source:           d1 | b4          (which instrument the variables live in)
+#     when:             {VARIABLE: value, ...}
+#     cognitive_status: CN | MCI | DEMENTIA | UNKNOWN
+#     ad_etiology:      AD | NON_AD | UNCERTAIN | UNKNOWN
+#     confidence:       high | medium | low
+#     reference:        citation for the mapping (REQUIRED when freezing)
+#
+# All matching rules are evaluated, not just the first. If two matching rules
+# disagree on cognitive_status the visit is reported as
+# classification_status = conflicting, never silently resolved.
+#
+# Example of the intended shape (INACTIVE - illustrative only, NOT verified
+# against the official dictionary, deliberately left commented out):
+#
+# rules:
+#   - id: d1_normal_cognition
+#     source: d1
+#     when: {NORMCOG: "1"}
+#     cognitive_status: CN
+#     ad_etiology: NON_AD
+#     confidence: high
+#     reference: "NACC UDS D1, element NORMCOG - VERIFY BEFORE USE"
+# ---------------------------------------------------------------------------
+
+rules: []
+
+# ---------------------------------------------------------------------------
+# B4 free-text diagnosis labels (dx1..dx5)
+# ---------------------------------------------------------------------------
+# B4 stores human-readable phrases such as "Cognitively normal". Mapping a
+# phrase onto a controlled vocabulary is still an interpretation, so it lives
+# here rather than in code, and is likewise inactive until the codebook is
+# frozen. Keys are compared case-insensitively after whitespace collapsing.
+b4_dx_text: {}
+
+# ---------------------------------------------------------------------------
+# CDR global score (B4.CDRTOT)
+# ---------------------------------------------------------------------------
+# The CDR is a standard instrument, but the mapping from a global score to a
+# cognitive-status label is a study-level decision (e.g. whether CDR 0.5 counts
+# as MCI or as very mild dementia). It is therefore configured, not assumed.
+cdr_global: {}
