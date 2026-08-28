@@ -7,6 +7,8 @@ Subcommands
 ``qc``            quality control only, no radiomics extraction
 ``run``           ``extract`` + ``longitudinal`` + ``run_metadata.json``
 ``download``      fetch sessions with the official NITRC-IR downloader (explicit only)
+``clinical-link`` MRI catalogue + D1/B4/C1 -> clinical imaging master + validation
+``clinical-radiomics`` clinical master + radiomics tables -> analysis datasets
 
 Examples
 --------
@@ -15,6 +17,20 @@ Examples
     python cli.py extract --input oasis3_radiomics_smoketest/freesurfer --output results/
     python cli.py longitudinal --features results/radiomics_features_long.csv --output results/
     python cli.py run --input oasis3_radiomics_smoketest/freesurfer --output results/
+
+    python cli.py clinical-link \
+        --mri-catalog oasis3_mri_catalog.csv \
+        --d1 diagnostic/OASIS3_UDSd1_diagnoses.csv \
+        --b4 diagnostic/OASIS3_UDSb4_cdr.csv \
+        --c1 diagnostic/OASIS3_UDSc1_cognitive_assessments.csv \
+        --clinical-window-days 180 --output clinical_results/
+
+    python cli.py clinical-radiomics \
+        --clinical clinical_results/clinical_imaging_master.csv \
+        --radiomics results/radiomics_features_wide.csv \
+        --deltas results/radiomics_longitudinal_deltas.csv \
+        --slopes results/radiomics_longitudinal_slopes.csv \
+        --output dataset/
 """
 
 from __future__ import annotations
@@ -24,6 +40,15 @@ import logging
 import sys
 from pathlib import Path
 
+from .clinical import DEFAULT_CLINICAL_WINDOW_DAYS
+from .clinical.classification import ClassificationCodebook, CodebookError
+from .clinical.readers import ClinicalReaderError
+from .clinical_dataset import (
+    ClinicalDatasetError,
+    build_clinical_linkage,
+    build_clinical_radiomics,
+    write_linkage_outputs,
+)
 from .config import ConfigError, PipelineConfig
 from .discovery import DiscoveryError, discover_sessions
 from .download_oasis import (
@@ -51,6 +76,8 @@ logger = logging.getLogger("oasis_radiomics.cli")
 DEFAULT_INPUT = Path("oasis3_radiomics_smoketest/freesurfer")
 DEFAULT_OUTPUT = Path("results")
 DEFAULT_FEATURES = DEFAULT_OUTPUT / "radiomics_features_long.csv"
+DEFAULT_CLINICAL_OUTPUT = Path("clinical_results")
+DEFAULT_DATASET_OUTPUT = Path("dataset")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -120,6 +147,36 @@ def build_parser() -> argparse.ArgumentParser:
     download.add_argument("--max-cases", type=int, default=None, help="Download at most N sessions.")
     download.add_argument("--make-example-csv", action="store_true", help="Write a two-session example id CSV and exit.")
     download.set_defaults(handler=_handle_download)
+
+    clinical_link = subparsers.add_parser(
+        "clinical-link",
+        help="Link MRI sessions to OASIS-3 clinical visits (D1/B4, optional C1).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    _add_common_arguments(clinical_link)
+    clinical_link.add_argument("--mri-catalog", type=Path, required=True, help="OASIS MRI session catalogue export (Label/Subject/M-F/Age/Scanner).")
+    clinical_link.add_argument("--d1", type=Path, required=True, help="OASIS3_UDSd1_diagnoses.csv (primary diagnostic source).")
+    clinical_link.add_argument("--b4", type=Path, required=True, help="OASIS3_UDSb4_cdr.csv (CDR / MMSE / dx labels).")
+    clinical_link.add_argument("--c1", type=Path, default=None, help="OASIS3_UDSc1_cognitive_assessments.csv (optional psychometrics).")
+    clinical_link.add_argument("--clinical-window-days", type=int, default=DEFAULT_CLINICAL_WINDOW_DAYS, help="Half-width of the MRI<->clinical matching window, in days.")
+    clinical_link.add_argument("--cognitive-window-days", type=int, default=None, help="Separate window for C1; defaults to --clinical-window-days.")
+    clinical_link.add_argument("--codebook", type=Path, default=None, help="Path to clinical_classification.yaml.")
+    clinical_link.add_argument("--output", type=Path, default=DEFAULT_CLINICAL_OUTPUT, help="Directory for the linkage outputs.")
+    clinical_link.set_defaults(handler=_handle_clinical_link)
+
+    clinical_radiomics = subparsers.add_parser(
+        "clinical-radiomics",
+        help="Join the clinical imaging master with the radiomics tables.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    _add_common_arguments(clinical_radiomics)
+    clinical_radiomics.add_argument("--clinical", type=Path, required=True, help="clinical_imaging_master.csv from 'clinical-link'.")
+    clinical_radiomics.add_argument("--radiomics", type=Path, required=True, help="radiomics_features_wide.csv (read-only).")
+    clinical_radiomics.add_argument("--deltas", type=Path, default=None, help="radiomics_longitudinal_deltas.csv (read-only).")
+    clinical_radiomics.add_argument("--slopes", type=Path, default=None, help="radiomics_longitudinal_slopes.csv (read-only).")
+    clinical_radiomics.add_argument("--clinical-visits", type=Path, default=None, help="clinical_visits.csv; auto-detected next to --clinical when omitted.")
+    clinical_radiomics.add_argument("--output", type=Path, default=DEFAULT_DATASET_OUTPUT, help="Directory for the analysis datasets.")
+    clinical_radiomics.set_defaults(handler=_handle_clinical_radiomics)
 
     return parser
 
@@ -227,6 +284,50 @@ def _handle_download(args: argparse.Namespace, config: PipelineConfig) -> int:
     return 0
 
 
+def _handle_clinical_link(args: argparse.Namespace, config: PipelineConfig) -> int:
+    """``clinical-link``: build the clinical imaging master table."""
+    codebook = ClassificationCodebook.load(args.codebook)
+    result = build_clinical_linkage(
+        mri_catalog=args.mri_catalog,
+        d1_path=args.d1,
+        b4_path=args.b4,
+        c1_path=args.c1,
+        window_days=args.clinical_window_days,
+        cognitive_window_days=args.cognitive_window_days,
+        codebook=codebook,
+    )
+    outputs = write_linkage_outputs(result, args.output)
+    for name, path in outputs.items():
+        logger.info("  %-24s -> %s", name, path)
+    logger.info(
+        "Linked %d/%d MRI session(s) within +/-%d days.",
+        result.summary["valid_matches"],
+        result.summary["mri_sessions"],
+        args.clinical_window_days,
+    )
+    if not codebook.is_active:
+        logger.warning(
+            "Diagnostic classes were NOT derived: the classification codebook is "
+            "unfrozen. Raw D1/B4 variables are preserved in the outputs."
+        )
+    return 0
+
+
+def _handle_clinical_radiomics(args: argparse.Namespace, config: PipelineConfig) -> int:
+    """``clinical-radiomics``: join the clinical master with the radiomics tables."""
+    outputs = build_clinical_radiomics(
+        clinical_master=args.clinical,
+        radiomics_wide=args.radiomics,
+        output_dir=args.output,
+        deltas=args.deltas,
+        slopes=args.slopes,
+        clinical_visits=args.clinical_visits,
+    )
+    for name, path in outputs.items():
+        logger.info("  %-30s -> %s", name, path)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # entry point
 # ---------------------------------------------------------------------------
@@ -239,7 +340,15 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = PipelineConfig.load(args.config)
         return int(args.handler(args, config))
-    except (ConfigError, DiscoveryError, DownloadError, PipelineError) as exc:
+    except (
+        ConfigError,
+        DiscoveryError,
+        DownloadError,
+        PipelineError,
+        ClinicalDatasetError,
+        ClinicalReaderError,
+        CodebookError,
+    ) as exc:
         logger.error("%s", exc)
         return 1
     except FileNotFoundError as exc:

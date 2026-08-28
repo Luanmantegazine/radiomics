@@ -16,6 +16,10 @@ oasis3_freesurfer_catalog.csv
 # --- pipeline outputs (regenerate with `python cli.py run`) ---------------
 results/
 results_*/
+
+# --- clinical linkage outputs (regenerate with `python cli.py clinical-link`) ---
+clinical_results/
+dataset/
 prepared_nifti/
 *.log
 

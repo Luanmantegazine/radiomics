@@ -316,6 +316,117 @@ radiomics_config.yaml       frozen acquisition settings
 ACQUISITION_PROTOCOL.md     methodological protocol/checklist
 ```
 
+## Clinical data integration
+
+A dedicated clinical layer (`oasis_radiomics/clinical/`) links OASIS-3 clinical
+assessments to MRI sessions so radiomic features can later be analysed against
+cognitive status and progression. It contains **no machine learning** and does
+not touch the frozen 16-ROI / 107-feature radiomics protocol; the radiomics
+outputs are read-only inputs.
+
+The full specification lives in **[`CLINICAL_LINKAGE_PROTOCOL.md`](CLINICAL_LINKAGE_PROTOCOL.md)**.
+
+### Required OASIS files
+
+| File | Role |
+|---|---|
+| `OASIS3_UDSd1_diagnoses.csv` | **primary diagnostic source** (NORMCOG, DEMENTED, MCI\*, PROBAD, POSSAD, ...) |
+| `OASIS3_UDSb4_cdr.csv` | CDR (`CDRTOT`, `CDRSUM`), `MMSE` and free-text `dx1`..`dx5`; complements D1 |
+| `OASIS3_UDSc1_cognitive_assessments.csv` | **optional** psychometrics (fluency, Trail Making, logical memory, ...) |
+| MRI session catalogue | `Label`, `Subject`, `M/F`, `Age`, `Scanner` |
+
+Source files are read-only and are never modified.
+
+### Usage
+
+```bash
+python cli.py clinical-link \
+  --mri-catalog oasis3_mri_catalog.csv \
+  --d1 diagnostic/OASIS3_UDSd1_diagnoses.csv \
+  --b4 diagnostic/OASIS3_UDSb4_cdr.csv \
+  --c1 diagnostic/OASIS3_UDSc1_cognitive_assessments.csv \
+  --clinical-window-days 180 \
+  --output clinical_results/
+
+python cli.py clinical-radiomics \
+  --clinical clinical_results/clinical_imaging_master.csv \
+  --radiomics results/radiomics_features_wide.csv \
+  --deltas results/radiomics_longitudinal_deltas.csv \
+  --slopes results/radiomics_longitudinal_slopes.csv \
+  --output dataset/
+```
+
+### Generated datasets
+
+```
+clinical_results/
+├── clinical_visits.csv                 one row per subject x clinical day (D1+B4 merged)
+├── clinical_imaging_master.csv         one row per MRI session
+└── clinical_linkage_validation.json    parameters, summary and every issue found
+
+dataset/
+├── clinical_radiomics_sessions.csv     clinical + all session-level radiomic features
+├── clinical_radiomics_deltas.csv       radiomic deltas with clinical status at t0/t1
+└── clinical_radiomics_subjects.csv     radiomic slopes with the subject's trajectory
+```
+
+### MRI-clinical temporal matching
+
+MRI and clinical visits do not share a calendar, so each MRI session is linked
+to the **nearest in time** clinical visit **of the same subject**:
+
+```
+clinical_mri_gap_days = clinical_day - mri_day      (negative = visit before the scan)
+```
+
+* default window **±180 days**, configurable with `--clinical-window-days`;
+* equidistant visits resolve deterministically to the **earlier** one and are
+  flagged `ambiguous_equal_distance`;
+* **nothing is silently discarded** - a session outside the window is kept with
+  `clinical_match_valid = False`, and a subject with no clinical data at all is
+  kept with `clinical_match_reason = no_clinical_visit`;
+* C1 is matched **independently**, with its own day, gap and validity columns,
+  because psychometric testing rarely falls on the diagnostic visit day.
+
+### Diagnosis at MRI vs. future conversion
+
+> A diagnosis recorded **after** an MRI never relabels that MRI.
+
+`diagnosis_at_mri` comes only from the visit the scan was linked to. Later
+information is exposed separately so conversion can be *predicted* rather than
+leaked:
+
+```
+clinical d0500 = MCI,  d1200 = MCI,  d2000 = AD        MRI at d0800
+    diagnosis_at_mri   = MCI     <- not AD
+    future_diagnosis   = AD
+    conversion_event   = MCI_to_AD
+    conversion_day     = 2000
+    days_to_conversion = 1200
+```
+
+### ⚠️ D1 code mappings require the official data dictionary
+
+The numeric semantics of the D1 variables are defined by the official NACC UDS
+Data Element Dictionary, which is **not part of this repository**. This project
+does not guess at them.
+
+All clinical meaning lives in `clinical_classification.yaml`, which ships
+**unfrozen**. Until it is frozen every visit is reported as:
+
+```
+cognitive_status      = UNKNOWN
+ad_etiology           = UNKNOWN
+classification_status = unresolved_codebook
+```
+
+while **every raw D1/B4/C1 variable is still written to the outputs** (145 + 19
++ 103 columns), so nothing is lost and no unverified assumption enters the
+dataset. `UNKNOWN` never means "normal". To activate classification, obtain the
+official dictionary, write the rules with a `reference` citation for each, and
+set `codebook_frozen: true`. An empty frozen codebook, an uncited rule, and a
+value outside the controlled vocabulary are all rejected.
+
 ## Tests
 
 ```bash
