@@ -28,3 +28,10 @@ venv/
 .coverage
 oasis3_pilot/
 results_pilot/
+
+# --- credentials: NEVER commit NITRC/OASIS session state ------------------
+.cookies-*.txt
+.DS_Store
+
+# --- supervised label outputs (regenerate with `cli.py supervised-labels`) -
+supervised_dataset/

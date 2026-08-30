@@ -1,0 +1,327 @@
+# ===========================================================================
+# OASIS-3 supervised label policy
+# ===========================================================================
+# Versioned, auditable mapping from the OASIS-3 B4 free-text diagnoses
+# (dx1..dx5) onto supervised-learning labels.
+#
+# This file is INDEPENDENT of clinical_classification.yaml. That file governs
+# the D1 *numeric* codebook, whose semantics are not documented in this
+# repository and therefore remain unfrozen. This file governs the B4 *textual*
+# diagnoses, which are clinically readable, and is frozen and versioned on its
+# own terms.
+#
+# EVERY string observed in the source is enumerated below. A string that is not
+# listed becomes UNMAPPED and is excluded from training - there is no fallback
+# and no substring matching, so a new OASIS release cannot silently acquire a
+# label. Substring rules such as `if "AD" in dx1` are deliberately NOT used:
+# "AD dem cannot be primary" contains "AD" but explicitly means AD is NOT the
+# primary etiology.
+#
+# Vocabulary enumerated from diagnostic/OASIS3_UDSb4_cdr.csv (8626 rows,
+# 1378 subjects): 53 distinct dx1 values, all mapped.
+# ===========================================================================
+
+version: "oasis3-supervised-labels-v1.0"
+policy_id: SUPERVISED_LABEL_POLICY
+source: "OASIS3_UDSb4_cdr.csv dx1..dx5 (free-text clinical diagnosis)"
+
+# Comparison is exact after normalisation. The ORIGINAL string is always
+# preserved in the outputs; normalisation only affects matching.
+normalization:
+  strip: true
+  collapse_whitespace: true
+  case_insensitive: true
+
+primary_column: dx1
+secondary_columns: [dx2, dx3, dx4, dx5]
+
+# ---------------------------------------------------------------------------
+# Primary label, driven by dx1
+# ---------------------------------------------------------------------------
+current_state:
+
+  CN:
+    rule_id: cn_b4_dx1_exact
+    reference: "OASIS-3 B4 dx1 free text; both phrases state absence of dementia."
+    dx1_exact:
+      - Cognitively normal
+      - No dementia
+
+  # -------------------------------------------------------------------------
+  # MCI IS INTENTIONALLY EMPTY. THIS IS THE CENTRAL FINDING OF v1.0.
+  #
+  # OASIS-3 B4 dx1..dx5 contains NO MCI label: no value anywhere in the file
+  # matches /\bMCI\b/ or "mild cognitive". The MCI-like categories are the
+  # WashU/ADRC "uncertain" family, listed under excluded.UNCERTAIN below
+  # (630 B4 rows). Mapping any of them to MCI is a clinical decision this
+  # repository is not entitled to make on its own, so they are classified
+  # UNCERTAIN and excluded from training.
+  #
+  # CONSEQUENCE: with this policy the MCI class is empty and the MCI->AD
+  # progression target has zero candidates. That is a real property of the
+  # data under an honest policy, not a pipeline failure.
+  #
+  # To define MCI, move the chosen strings from excluded.UNCERTAIN.dx1_exact
+  # into MCI.dx1_exact, add a `reference` justifying each, and bump `version`.
+  # See mci_candidates_pending_review below and SUPERVISED_LABELING_PROTOCOL.md.
+  # -------------------------------------------------------------------------
+  MCI:
+    rule_id: mci_b4_dx1_exact
+    reference: "NOT DEFINED - see the note above."
+    dx1_exact: []
+
+  AD:
+    rule_id: ad_b4_dx1_exact
+    reference: >-
+      NACC/ADRC AD-dementia primary categories. "DAT" (Dementia of the
+      Alzheimer Type) is the WashU ADRC synonym for AD dementia and is
+      included. "AD dem cannot be primary" is deliberately EXCLUDED and
+      classified OTHER_DEMENTIA: it states that AD is present but is not the
+      primary etiology.
+    dx1_exact:
+      - AD Dementia
+      - DAT
+      - AD dem w/depresss, not contribut
+      - AD dem w/depresss, contribut
+      - AD dem Language dysf with
+      - AD dem Language dysf after
+      - AD dem Language dysf prior
+      - AD dem w/CVD not contrib
+      - AD dem w/CVD contribut
+      - AD dem w/PDI after AD dem not contrib
+      - AD dem w/PDI after AD dem contribut
+      - AD dem w/oth (list B) contribut
+      - AD dem w/oth (list B) not contrib
+      - AD dem distrubed social, with
+      - AD dem distrubed social, after
+      - AD dem distrubed social, prior
+      - AD dem visuospatial, with
+      - AD dem visuospatial, prior
+      - AD dem visuospatial, after
+      - AD dem w/oth unusual features/demt on
+      - AD dem w/oth unusual feat/subs demt
+      - AD dem w/oth unusual features
+      - AD dem/FLD prior to AD dem
+      - AD dem w/Frontal lobe/demt at onset
+      - DAT w/depresss, not contribut
+      - DAT w/depresss, contribut
+      - DAT Language dysf after
+      - DAT w/CVD contribut
+      - DAT w/CVD not contrib
+      - DAT w/PDI after DAT not contrib
+      - DAT distrubed social, prior
+      - DAT distrubed social, after
+
+# ---------------------------------------------------------------------------
+# Mapped but excluded from the CN/MCI/AD training cohort
+# ---------------------------------------------------------------------------
+excluded:
+
+  OTHER_DEMENTIA:
+    rule_id: other_dementia_b4_dx1_exact
+    reference: >-
+      Non-Alzheimer dementia etiologies (Lewy body, vascular, frontotemporal,
+      Parkinson) plus "AD dem cannot be primary", where AD is present but not
+      primary. Never folded into the AD class.
+    dx1_exact:
+      - DLBD, primary
+      - DLBD, secondary
+      - Vascular Demt, primary
+      - Vascular Demt, secondary
+      - Frontotemporal demt. prim
+      - Frontotemporal demt. secn
+      - Dementia/PD, primary
+      - Non AD dem, Other primary
+      - Non DAT, Other primary
+      - Incipient Non-AD dem
+      - ProAph w/o dement
+      - AD dem cannot be primary
+
+  UNCERTAIN:
+    rule_id: uncertain_b4_dx1_exact
+    reference: >-
+      WashU/ADRC "uncertain" and "incipient" categories. These are the MCI
+      CANDIDATES; they are NOT labelled MCI without an explicit clinical
+      decision. 471 of the 475 "uncertain dementia" rows carry CDRTOT=0.5,
+      which is consistent with MCI but is not itself a diagnosis.
+    dx1_exact:
+      - uncertain dementia
+      - 'Unc: ques. Impairment'
+      - 0.5 in memory only
+      - Incipient demt PTP
+      - uncertain, possible NON AD dem
+      - 'Unc: impair reversible'
+
+  NON_DIAGNOSTIC:
+    rule_id: non_diagnostic_token
+    reference: >-
+      Form artifacts, not diagnoses. "A"/"B" are the NACC list-A / list-B
+      selectors; "Q" is a single stray value.
+    dx1_exact:
+      - "Q"
+
+# ---------------------------------------------------------------------------
+# Secondary diagnoses (dx2..dx5)
+# ---------------------------------------------------------------------------
+# Used ONLY for conflict detection and audit. A secondary AD diagnosis never
+# promotes a session into the AD class - see conflict_policy.
+secondary:
+
+  AD:
+    rule_id: ad_b4_secondary_exact
+    values:
+      - AD Dementia
+      - DAT
+      - AD dem w/depresss, not contribut
+      - AD dem w/depresss, contribut
+      - AD dem Language dysf with
+      - AD dem Language dysf after
+      - AD dem Language dysf prior
+      - AD dem w/CVD not contrib
+      - AD dem w/CVD contribut
+      - AD dem w/PDI after AD dem not contrib
+      - AD dem w/PDI after AD dem contribut
+      - AD dem w/oth (list B) contribut
+      - AD dem w/oth (list B) not contrib
+      - AD dem distrubed social, with
+      - AD dem distrubed social, after
+      - AD dem distrubed social, prior
+      - AD dem visuospatial, with
+      - AD dem visuospatial, prior
+      - AD dem visuospatial, after
+      - AD dem w/oth unusual features/demt on
+      - AD dem w/oth unusual feat/subs demt
+      - AD dem w/oth unusual features
+      - AD dem/FLD prior to AD dem
+      - AD dem w/Frontal lobe/demt at onset
+      - DAT w/depresss, not contribut
+      - DAT w/depresss, contribut
+      - DAT Language dysf after
+      - DAT w/CVD contribut
+      - DAT w/CVD not contrib
+      - DAT w/PDI after DAT not contrib
+      - DAT distrubed social, prior
+      - DAT distrubed social, after
+      - DAT visuospatial, after
+      - DAT w/PDI after DAT contribut
+      - DAT w/oth (list B) contribut
+
+  OTHER_DEMENTIA:
+    rule_id: other_dementia_b4_secondary_exact
+    values:
+      - DLBD, primary
+      - DLBD, secondary
+      - Vascular Demt, primary
+      - Vascular Demt, secondary
+      - Frontotemporal demt. prim
+      - Frontotemporal demt. secn
+      - Dementia/PD, primary
+      - Non AD dem, Other primary
+      - Non DAT, Other primary
+      - Incipient Non-AD dem
+      - ProAph w/o dement
+      - AD dem cannot be primary
+      - Active DLBD
+      - Active PSNP
+      - DAT cannot be primary
+      - Non AD dem, Other secondary
+      - Non DAT, Other secondary
+
+  UNCERTAIN:
+    rule_id: uncertain_b4_secondary_exact
+    values:
+      - uncertain dementia
+      - 'Unc: ques. Impairment'
+      - 0.5 in memory only
+      - Incipient demt PTP
+      - uncertain, possible NON AD dem
+      - 'Unc: impair reversible'
+
+  COMORBIDITY:
+    rule_id: comorbidity_b4_secondary_exact
+    reference: >-
+      Contributing medical/psychiatric conditions, not dementia diagnoses.
+      NOTE: "other mental retarAD demion" is a corrupted string in the source
+      file - a find/replace turned "dat" into "AD dem" inside
+      "retardation". It is enumerated verbatim so it is matched, not dropped.
+    values:
+      - Active Affective disorder
+      - Active Alcoholism
+      - Active B-12 Deficiency
+      - Active Bereavement
+      - Active CVD
+      - Active Global Cerebral Hypop
+      - Active Hydrocephalus
+      - Active Hypothyroidism
+      - Active Major Head Trauma
+      - Active Med-induced Cog Dys
+      - Active Mood disorder
+      - Active Other neurol/med diagnoses
+      - Active PD drug-induced
+      - Active PD idiopathic
+      - Active Seizure Disorder
+      - Oth potentially transmissible dis
+      - Park Idiopathic
+      - Rapid Course (not CJD)
+      - Remote Alcoholism
+      - Remote Amnestic syndrome
+      - Remote B-12 Deficiency
+      - Remote Bereavement
+      - Remote CVD
+      - Remote Global Cerebral Hypop
+      - Remote Hydrocephalus
+      - Remote Hypothyroidism
+      - Remote Major Head Trauma
+      - Remote Med-induced Cog Dys
+      - Remote Mood disorder
+      - Remote Other neurol/med diagnoses
+      - Remote PD drug-induced
+      - Remote PD idiopathic
+      - Remote Seizure Disorder
+      - other mental retarAD demion
+      - other neurol/med diagnoses
+
+  NON_DIAGNOSTIC:
+    rule_id: non_diagnostic_token
+    values:
+      - "A"
+      - "B"
+
+# ---------------------------------------------------------------------------
+# Conflict handling
+# ---------------------------------------------------------------------------
+conflict_policy:
+  # An AD diagnosis in dx2..dx5 does NOT override a non-AD dx1.
+  secondary_ad_promotes_primary: false
+  # A CN primary with a dementia secondary is contradictory -> label_status=conflicting.
+  flag_cn_with_dementia_secondary: true
+  # Non-AD dementia secondary alongside an AD primary -> flagged, label kept.
+  flag_mixed_dementia_etiology: true
+
+# ---------------------------------------------------------------------------
+# CDR / MMSE consistency checks
+# ---------------------------------------------------------------------------
+# CDR and MMSE are covariates and cross-checks. They NEVER assign a label:
+# CDRTOT==0.5 does not mean MCI under this policy.
+consistency_checks:
+  enabled: true
+  cn_max_cdrtot: 0.0        # CN with CDRTOT > 0 -> diagnosis_cdr_disagreement
+  ad_min_cdrtot: 0.5        # AD with CDRTOT < 0.5 -> diagnosis_cdr_disagreement
+
+# ---------------------------------------------------------------------------
+# MCI candidates awaiting clinical review - INACTIVE
+# ---------------------------------------------------------------------------
+# Documentation only; this block is never read by the code. It records which
+# strings a reviewer must rule on to populate current_state.MCI.
+mci_candidates_pending_review:
+  b4_row_counts:
+    "uncertain dementia": 475
+    "Unc: ques. Impairment": 80
+    "0.5 in memory only": 23
+    "Incipient demt PTP": 23
+    "uncertain, possible NON AD dem": 18
+    "Unc: impair reversible": 7
+  total_b4_rows: 626
+  note: >-
+    "Incipient Non-AD dem" (4 rows) is classified OTHER_DEMENTIA rather than an
+    MCI candidate, because it names a non-Alzheimer etiology.

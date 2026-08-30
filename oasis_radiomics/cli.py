@@ -9,6 +9,7 @@ Subcommands
 ``download``      fetch sessions with the official NITRC-IR downloader (explicit only)
 ``clinical-link`` MRI catalogue + D1/B4/C1 -> clinical imaging master + validation
 ``clinical-radiomics`` clinical master + radiomics tables -> analysis datasets
+``supervised-labels`` clinical-radiomics sessions -> CN/MCI/AD + MCI->AD datasets
 
 Examples
 --------
@@ -42,6 +43,7 @@ from pathlib import Path
 
 from .clinical import DEFAULT_CLINICAL_WINDOW_DAYS
 from .clinical.classification import ClassificationCodebook, CodebookError
+from .clinical.labels import LabelPolicy, LabelPolicyError
 from .clinical.readers import ClinicalReaderError
 from .clinical_dataset import (
     ClinicalDatasetError,
@@ -50,6 +52,11 @@ from .clinical_dataset import (
     write_linkage_outputs,
 )
 from .config import ConfigError, PipelineConfig
+from .supervised_dataset import (
+    DEFAULT_PROGRESSION_HORIZON_DAYS,
+    SupervisedDatasetError,
+    build_supervised_datasets,
+)
 from .discovery import DiscoveryError, discover_sessions
 from .download_oasis import (
     DownloadError,
@@ -78,6 +85,7 @@ DEFAULT_OUTPUT = Path("results")
 DEFAULT_FEATURES = DEFAULT_OUTPUT / "radiomics_features_long.csv"
 DEFAULT_CLINICAL_OUTPUT = Path("clinical_results")
 DEFAULT_DATASET_OUTPUT = Path("dataset")
+DEFAULT_SUPERVISED_OUTPUT = Path("supervised_dataset")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -177,6 +185,20 @@ def build_parser() -> argparse.ArgumentParser:
     clinical_radiomics.add_argument("--clinical-visits", type=Path, default=None, help="clinical_visits.csv; auto-detected next to --clinical when omitted.")
     clinical_radiomics.add_argument("--output", type=Path, default=DEFAULT_DATASET_OUTPUT, help="Directory for the analysis datasets.")
     clinical_radiomics.set_defaults(handler=_handle_clinical_radiomics)
+
+    supervised = subparsers.add_parser(
+        "supervised-labels",
+        help="Derive CN/MCI/AD and MCI->AD supervised labels from the B4 diagnoses.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    _add_common_arguments(supervised)
+    supervised.add_argument("--clinical-radiomics", type=Path, required=True, help="clinical_radiomics_sessions.csv (or clinical_imaging_master.csv).")
+    supervised.add_argument("--clinical-visits", type=Path, required=True, help="clinical_visits.csv; supplies the future visits for the progression target.")
+    supervised.add_argument("--label-policy", type=Path, default=None, help="Path to supervised_labels.yaml.")
+    supervised.add_argument("--clinical-window-days", type=int, default=DEFAULT_CLINICAL_WINDOW_DAYS, help="Maximum MRI<->clinical gap for a training-eligible label.")
+    supervised.add_argument("--progression-horizon-days", type=int, default=DEFAULT_PROGRESSION_HORIZON_DAYS, help="Horizon for MCI->AD conversion; beyond it a non-converter is CENSORED, not stable.")
+    supervised.add_argument("--output", type=Path, default=DEFAULT_SUPERVISED_OUTPUT, help="Directory for the supervised datasets.")
+    supervised.set_defaults(handler=_handle_supervised_labels)
 
     return parser
 
@@ -328,6 +350,35 @@ def _handle_clinical_radiomics(args: argparse.Namespace, config: PipelineConfig)
     return 0
 
 
+def _handle_supervised_labels(args: argparse.Namespace, config: PipelineConfig) -> int:
+    """``supervised-labels``: derive Target A and Target B."""
+    policy = LabelPolicy.load(args.label_policy)
+    result, outputs = build_supervised_datasets(
+        clinical_radiomics=args.clinical_radiomics,
+        clinical_visits=args.clinical_visits,
+        output_dir=args.output,
+        policy=policy,
+        window_days=args.clinical_window_days,
+        horizon_days=args.progression_horizon_days,
+    )
+    for name, path in outputs.items():
+        logger.info("  %-32s -> %s", name, path)
+
+    audit = result.audit
+    logger.info(
+        "Target A: CN=%d MCI=%d AD=%d | eligible %d session(s) / %d subject(s).",
+        audit["CN_sessions"], audit["MCI_sessions"], audit["AD_sessions"],
+        audit["training_eligible_sessions"], audit["training_eligible_subjects"],
+    )
+    logger.info(
+        "Target B: MCI_TO_AD=%d MCI_STABLE=%d CENSORED=%d.",
+        audit["mci_to_ad"], audit["mci_stable"], audit["censored"],
+    )
+    if not audit["dataset_is_final"]:
+        logger.warning("Dataset is NOT scientifically final - see the audit JSON.")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # entry point
 # ---------------------------------------------------------------------------
@@ -348,6 +399,8 @@ def main(argv: list[str] | None = None) -> int:
         ClinicalDatasetError,
         ClinicalReaderError,
         CodebookError,
+        SupervisedDatasetError,
+        LabelPolicyError,
     ) as exc:
         logger.error("%s", exc)
         return 1

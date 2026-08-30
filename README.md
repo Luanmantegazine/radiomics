@@ -427,6 +427,70 @@ official dictionary, write the rules with a `reference` citation for each, and
 set `codebook_frozen: true`. An empty frozen codebook, an uncited rule, and a
 value outside the controlled vocabulary are all rejected.
 
+## Supervised labels
+
+A separately versioned layer turns the linked clinical information into
+supervised-learning targets. **No machine learning and no feature selection** -
+labels only. Full specification: **[`SUPERVISED_LABELING_PROTOCOL.md`](SUPERVISED_LABELING_PROTOCOL.md)**.
+
+Two targets, deliberately kept apart:
+
+```
+Target A   X(MRI)            ->  y in {CN, MCI, AD}
+Target B   X(MRI while MCI)  ->  y in {MCI_STABLE, MCI_TO_AD}   (+ CENSORED, excluded)
+```
+
+```bash
+python cli.py supervised-labels \
+  --clinical-radiomics dataset_full/clinical_radiomics_sessions.csv \
+  --clinical-visits clinical_results/clinical_visits.csv \
+  --label-policy supervised_labels.yaml \
+  --clinical-window-days 180 \
+  --progression-horizon-days 1095 \
+  --output supervised_dataset/
+```
+
+```
+supervised_dataset/
+├── supervised_radiomics_sessions.csv   Target A: one row per MRI + all features
+├── supervised_mci_progression.csv      Target B: MCI sessions + outcome
+├── diagnosis_vocabulary.csv            every dx1..dx5 string and its mapping
+└── supervised_label_audit.json         counts by session AND by subject
+```
+
+### Labels come from the B4 text, not from D1 codes
+
+All mappings live in `supervised_labels.yaml`, versioned independently of
+`clinical_classification.yaml` (which governs the undocumented D1 *numeric*
+codebook and still derives nothing). Matching is **exact after normalisation**;
+all 53 observed `dx1` values are enumerated. There are no substring rules:
+`"AD dem cannot be primary"` contains `"AD"` but means AD is *not* primary, and
+is classified `OTHER_DEMENTIA`. An unlisted string becomes `UNMAPPED` and is
+excluded - never defaulted to `CN`.
+
+CDR and MMSE are covariates and cross-checks only. `CDRTOT == 0.5` does **not**
+mean MCI.
+
+### ⚠️ OASIS-3 B4 has no MCI label
+
+No value in `dx1`..`dx5` matches `/\bMCI\b/` or "mild cognitive". Under policy
+v1.0 the MCI class is therefore **empty** and Target B has no candidates. The
+MCI-like strings are the WashU/ADRC *uncertain* family (626 B4 rows), classified
+`UNCERTAIN` and excluded pending clinical review. Defining MCI is a one-edit
+change to `supervised_labels.yaml`; the Target-B machinery is implemented and
+tested and activates on it. See §8 of the protocol.
+
+### Two rules that must not be relaxed
+
+**`CENSORED` is not `MCI_STABLE`.** Stability requires a non-AD sighting at or
+after the horizon. A participant who leaves follow-up six months after an MCI
+scan has an unobserved outcome, not a stable one.
+
+**Split by `subject_id`, never by row.** One participant contributes several MRI
+sessions; row-wise splitting puts `OAS30001` in both train and test. Use
+`subject_groups(rows)` as `groups` for `GroupKFold`, and
+`assert_no_subject_leakage(train, test)` to verify.
+
 ## Tests
 
 ```bash
