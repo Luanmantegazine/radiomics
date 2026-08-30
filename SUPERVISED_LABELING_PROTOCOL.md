@@ -1,6 +1,12 @@
 # OASIS-3 Supervised Labeling Protocol
 
-`SUPERVISED_LABEL_POLICY = "oasis3-supervised-labels-v1.0"` (`supervised_labels.yaml`)
+`SUPERVISED_LABEL_POLICY = "oasis3-supervised-labels-v2.1"` (`supervised_labels.yaml`)
+
+> **v2.0 changes the primary label source from B4 free text to the D1 diagnosis
+> form.** v1.0 found that B4 `dx1`..`dx5` carries no MCI label at all, which left
+> the MCI class and the whole MCI→AD target empty. D1 has explicit MCI variables
+> and an explicit aetiology block, so it expresses the full taxonomy. B4 is
+> retained as **auxiliary validation** and now populates `b4_agreement`.
 
 Specification of how OASIS-3 clinical information becomes the `y` of a
 supervised-learning experiment. No machine learning is performed here, and no
@@ -14,17 +20,123 @@ raw `dx1`, normalised `dx1`, matching rule, and policy version are all columns.
 
 ## 1. Clinical source
 
-Labels come from **B4 free-text diagnoses** (`OASIS3_UDSb4_cdr.csv`, `dx1`..`dx5`).
+Labels come from **D1** (`OASIS3_UDSd1_diagnoses.csv`). **B4** free text
+(`dx1`..`dx5`) is auxiliary validation only.
 
-This is a deliberate separation from `clinical_classification.yaml`, which
-governs the **D1 numeric** codebook. D1's numeric semantics are not documented
-in this repository, so that codebook stays unfrozen and derives nothing. The B4
-text is clinically readable, so it carries its own frozen, versioned policy.
-A supervised label must never rest on an unverified numeric mapping.
+### The D1 coding is validated, not assumed
 
-## 2. `dx1` mapping
+v1.0 refused to read D1 because its numeric semantics are not documented in this
+repository. v2.0 does not assume them either — it **validates** them against the
+independent B4 free text over the 8475 visits carrying both instruments. Every
+`== 1` flag, against the v1.0 B4 text mapping:
 
-`dx1` is the primary diagnosis and the sole driver of the current-state label.
+| D1 flag | n | agreement with B4 |
+|---|---:|---|
+| `NORMCOG` | 5785 | **99.7 %** CN |
+| `DEMENTED` | 1371 | **92.6 %** dementia (AD + non-AD) |
+| `MCIAMEM` | 83 | 86.7 % B4 "uncertain" family |
+| `MCIAPLUS` | 115 | 68.7 % B4 "uncertain" family |
+| `IMPNOMCI` | 255 | **91.4 %** B4 "uncertain" family |
+| `PROBAD` | 643 | **98.1 %** AD |
+| `alzdis` | 520 | **95.8 %** AD |
+| `FTD` | 9 | **100 %** non-AD dementia |
+
+This closes the v1.0 finding: the B4 "uncertain dementia" family that v1.0
+refused to call MCI is precisely what D1 codes as MCI / impaired-not-MCI.
+
+Values are binary. Anything outside `{0, 1}` is treated as unusable and never
+guessed — D1 contains three such cells (`DEMENTED=2` once, `IMPNOMCI=2` twice).
+Blank cells are NACC skip patterns, not zeros.
+
+`clinical_classification.yaml` is unaffected and remains unfrozen: it governs a
+different derivation (`cognitive_status` in the clinical linkage layer). The
+validation above is what licenses D1 here, and it is recorded per row in
+`b4_agreement`.
+
+### Taxonomy
+
+`cognitive_status` × `ad_etiology` → `supervised_label`:
+
+| D1 cognitive state | aetiology | label |
+|---|---|---|
+| `NORMCOG` | — | `CN` |
+| `MCIAMEM` / `MCIAPLUS` / `MCINON1` / `MCINON2` | any | `MCI` |
+| `IMPNOMCI` | — | `IMPAIRED_NOT_MCI` |
+| `DEMENTED` | AD | `AD` |
+| `DEMENTED` | non-AD or mixed | `OTHER_DEMENTIA` |
+| `DEMENTED` | none established | `DEMENTIA_UNKNOWN_ETIOLOGY` |
+| two states at once | — | `CONFLICTING` |
+| no state set | — | `MISSING` |
+
+Training cohort: **`CN` / `MCI` / `AD`**. Aetiology stays in its own column, so
+"MCI due to AD" remains visible without changing the label.
+
+### Aetiology across UDS generations
+
+UDS v1/v2 (`PROBAD`, `POSSAD`) and UDS v3 (`alzdis`) are version-dependent
+representations of the same concept. They are disjoint in OASIS-3 — never both
+filled on one visit — and neither is required to exist.
+
+### The paired "IF" fields are not binary
+
+Each AD flag has a companion qualifier — `PROBADIF`, `POSSADIF`, `alzdisif` —
+whose domain is **`{0, 1, 2}`**, where `1` = the aetiology is the **primary**
+cause and `2` = it merely **contributes**. Observed in OASIS-3: `PROBADIF=2`
+×9, `POSSADIF=2` ×39, `alzdisif=2` ×6.
+
+By default `ad_etiology_roles_accepted: [primary, unspecified]`. A
+contributing-only AD aetiology therefore does **not** put a demented visit in
+the `AD` class — AD is present but is not the cause — mirroring the exclusion
+of the B4 string `AD dem cannot be primary`. A blank qualifier leaves the role
+`unspecified` and does **not** demote the flag; a value outside the domain is
+recorded as `unspecified`, never guessed.
+
+The role is written to every row as `ad_etiology_role`, so the decision is
+auditable and the policy can be relaxed without touching code.
+
+> On the current cohort this rule changes **no** label: the 7 contributing
+> sessions are `IMPAIRED_NOT_MCI` (2), `OTHER_DEMENTIA` (3, where a non-AD
+> aetiology dominates) and `MCI` (2). None is a demented visit whose only AD
+> evidence is contributing.
+
+### MCI subtype qualifiers
+
+The four core indicators decide *whether* a visit is MCI. The companion domain
+fields describe *which kind* and never change the label:
+
+| core indicator | subtype | domain fields |
+|---|---|---|
+| `MCIAMEM` | `amnestic_single_domain` | — |
+| `MCIAPLUS` | `amnestic_multi_domain` | `MCIAPLAN` `MCIAPATT` `MCIAPEX` `MCIAPVIS` |
+| `MCINON1` | `non_amnestic_single_domain` | `MCIN1LAN` `MCIN1ATT` `MCIN1EX` `MCIN1VIS` |
+| `MCINON2` | `non_amnestic_multi_domain` | `MCIN2LAN` `MCIN2ATT` `MCIN2EX` `MCIN2VIS` |
+
+Written to `mci_subtype` and `mci_domains`. An orphaned domain flag (set
+without its core indicator — 2 such cells in OASIS-3, both `MCIAPEX`) never
+manufactures an MCI label.
+
+### B4 is an independent comparison source
+
+B4 no longer determines any label. `derive_b4_comparison_label()` derives a
+label from `dx1` **without seeing the D1 result**, and three columns record the
+comparison:
+
+| column | meaning |
+|---|---|
+| `b4_label` | the label B4 `dx1` would give on its own |
+| `b4_agreement` | `agree` / `disagree` / `b4_unavailable` / `not_comparable` |
+| `b4_disagreement_reason` | why, when they differ |
+
+A disagreement is warned in `label_warnings`, never applied.
+
+Multiple cognitive states firing at once produce `CONFLICTING`, **not** a
+priority win — 14 OASIS-3 visits are affected.
+
+## 2. `dx1` mapping (auxiliary validation)
+
+Under v2.0 this mapping no longer assigns labels. It powers `b4_agreement`, and
+remains the active path when `primary_source: B4` (the v1.0 behaviour, still
+tested).
 Matching is **exact after normalisation** (strip, collapse whitespace,
 lowercase). The original string is always preserved in the output.
 
@@ -115,13 +227,22 @@ the `DAT` synonym and the qualified `AD dem …` / `DAT …` variants. Explicitl
 body and Parkinson dementias, which are `OTHER_DEMENTIA` and never folded into
 `AD`.
 
-## 8. Definition of MCI — the central finding of v1.0
+## 8. Definition of MCI — resolved in v2.0
 
 **OASIS-3 B4 `dx1`–`dx5` contains no MCI label.** No value anywhere in the file
-matches `/\bMCI\b/` or `mild cognitive`. `current_state.MCI.dx1_exact` is
-therefore **empty**, and the MCI class and Target B are both empty.
+matches `/\bMCI\b/` or `mild cognitive`. That was v1.0's blocker.
 
-That is a property of the data under an honest policy, not a pipeline failure.
+**v2.0 resolves it from D1**, which carries explicit MCI variables:
+`MCIAMEM` and `MCIAPLUS` (amnestic) and `MCINON1` / `MCINON2` (non-amnestic).
+Any of them set to 1 yields `MCI`. `IMPNOMCI` yields the separate
+`IMPAIRED_NOT_MCI` class, which is **not** MCI and is excluded from training.
+
+The B4 cross-check confirms the reading: 77–91 % of the D1 MCI and
+impaired-not-MCI visits fall in the B4 "uncertain" family — exactly the strings
+v1.0 declined to interpret.
+
+The historical v1.0 finding is preserved below, because it still constrains what
+B4 alone can express.
 
 The MCI-like categories are the WashU/ADRC *uncertain* family, classified
 `UNCERTAIN` and excluded pending clinical review:

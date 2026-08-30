@@ -458,27 +458,39 @@ supervised_dataset/
 └── supervised_label_audit.json         counts by session AND by subject
 ```
 
-### Labels come from the B4 text, not from D1 codes
+### Labels come from D1, validated against the B4 text
 
-All mappings live in `supervised_labels.yaml`, versioned independently of
-`clinical_classification.yaml` (which governs the undocumented D1 *numeric*
-codebook and still derives nothing). Matching is **exact after normalisation**;
-all 53 observed `dx1` values are enumerated. There are no substring rules:
-`"AD dem cannot be primary"` contains `"AD"` but means AD is *not* primary, and
-is classified `OTHER_DEMENTIA`. An unlisted string becomes `UNMAPPED` and is
-excluded - never defaulted to `CN`.
+`supervised_labels.yaml` v2.0 uses **D1 as the primary source** and keeps B4 as
+**auxiliary validation**. v1.0 labelled from B4 and found it carries no MCI
+label at all; D1 has explicit MCI variables and an aetiology block, so it
+expresses the full taxonomy:
 
-CDR and MMSE are covariates and cross-checks only. `CDRTOT == 0.5` does **not**
-mean MCI.
+| D1 | label |
+|---|---|
+| `NORMCOG` | `CN` |
+| `MCIAMEM` / `MCIAPLUS` / `MCINON1` / `MCINON2` | `MCI` |
+| `IMPNOMCI` | `IMPAIRED_NOT_MCI` |
+| `DEMENTED` + `PROBAD`/`POSSAD`/`alzdis` | `AD` |
+| `DEMENTED` + `DLB`/`VASC`/`FTD`/… | `OTHER_DEMENTIA` |
+| `DEMENTED`, aetiology not established | `DEMENTIA_UNKNOWN_ETIOLOGY` |
 
-### ⚠️ OASIS-3 B4 has no MCI label
+The D1 coding is **not assumed** - it is validated against the independent B4
+text over the 8475 visits carrying both instruments (`NORMCOG` 99.7 % CN,
+`DEMENTED` 92.6 % dementia, `PROBAD` 98.1 % AD, `FTD` 100 % non-AD). Every row
+records the outcome in `b4_agreement`; on the real cohort **93.4 %** agree.
+B4 never overrides D1 - a disagreement is warned, not applied.
 
-No value in `dx1`..`dx5` matches `/\bMCI\b/` or "mild cognitive". Under policy
-v1.0 the MCI class is therefore **empty** and Target B has no candidates. The
-MCI-like strings are the WashU/ADRC *uncertain* family (626 B4 rows), classified
-`UNCERTAIN` and excluded pending clinical review. Defining MCI is a one-edit
-change to `supervised_labels.yaml`; the Target-B machinery is implemented and
-tested and activates on it. See §8 of the protocol.
+Values outside `{0, 1}` are never guessed (D1 has three such cells). Two
+cognitive states firing at once give `CONFLICTING`, not a priority win.
+
+Aetiology spans both UDS generations (`PROBAD`/`POSSAD` and `alzdis`), which are
+disjoint in OASIS-3. Their paired `…IF` qualifiers are **not** binary — domain
+`{0, 1, 2}`, where 2 means AD *contributes* rather than causes — so a
+contributing-only aetiology does not enter the `AD` class. MCI subtype and
+impaired domains are recorded in `mci_subtype` / `mci_domains`.
+
+CDR and MMSE remain covariates and cross-checks only. `CDRTOT == 0.5` does
+**not** mean MCI.
 
 ### Two rules that must not be relaxed
 

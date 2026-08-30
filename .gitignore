@@ -35,3 +35,19 @@ results_pilot/
 
 # --- supervised label outputs (regenerate with `cli.py supervised-labels`) -
 supervised_dataset/
+
+# ===========================================================================
+# CREDENTIALED OASIS-3 DATA AND PER-PARTICIPANT DERIVATIVES
+# ===========================================================================
+# OASIS-3 is credentialed and must not be redistributed. This covers the raw
+# clinical forms, the MRI session catalogue (per-participant demographics) and
+# every per-participant derivative. Obtain them through the authorised
+# OASIS/NITRC workflow and regenerate the derivatives with the CLI.
+diagnostic/
+results_full/
+dataset_full/
+acquisition/
+supervised_dataset/
+clinical_results/
+oasis3_mri_catalog.csv
+luanmantegazine_*.csv

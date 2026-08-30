@@ -29,7 +29,18 @@ from oasis_radiomics.supervised_dataset import (
 
 @pytest.fixture(scope="module")
 def policy() -> LabelPolicy:
+    """The shipped v2.0 policy: D1 primary, B4 auxiliary."""
     return LabelPolicy.load(None)
+
+
+#: D1 flag sets standing in for the diagnoses the fixtures used to express in B4.
+D1_BY_DIAGNOSIS = {
+    "Cognitively normal": {"NORMCOG": "1"},
+    "AD Dementia": {"DEMENTED": "1", "PROBAD": "1"},
+    "Vascular Demt, primary": {"DEMENTED": "1", "VASC": "1"},
+    "uncertain dementia": {"MCIAMEM": "1"},
+    "a diagnosis nobody enumerated": {},
+}
 
 
 @pytest.fixture(scope="module")
@@ -48,7 +59,9 @@ def mci_policy() -> LabelPolicy:
 
 
 def _session(subject: str, day: int, dx1: str, *, valid: bool = True, gap: int = 10) -> dict:
+    """One clinical-radiomics row carrying both the D1 flags and the B4 text."""
     return {
+        **D1_BY_DIAGNOSIS.get(dx1, {}),
         "subject_id": subject,
         "session_id": f"{subject}_MR_d{day:04d}",
         "mri_day": day,
@@ -72,7 +85,11 @@ def test_every_input_row_produces_one_output_row(policy: LabelPolicy) -> None:
     ]
     labelled = build_session_labels(rows, policy)
     assert len(labelled) == 3
-    assert [row["supervised_label"] for row in labelled] == [LABEL_CN, LABEL_AD, "OTHER_DEMENTIA"]
+    assert [row["supervised_label"] for row in labelled] == [
+        LABEL_CN,
+        LABEL_AD,
+        "OTHER_DEMENTIA",
+    ]
 
 
 def test_excluded_rows_are_kept_with_a_reason(policy: LabelPolicy) -> None:
@@ -84,10 +101,14 @@ def test_excluded_rows_are_kept_with_a_reason(policy: LabelPolicy) -> None:
 
 
 def test_raw_diagnosis_survives_next_to_the_label(policy: LabelPolicy) -> None:
+    """Both the raw D1 flags and the raw B4 text survive the derivation."""
     labelled = build_session_labels([_session("OAS30001", 100, "AD Dementia")], policy)
     assert labelled[0]["dx1"] == "AD Dementia"
     assert labelled[0]["dx1_normalized"] == "ad dementia"
+    assert labelled[0]["DEMENTED"] == "1"
+    assert labelled[0]["PROBAD"] == "1"
     assert labelled[0]["supervised_label"] == LABEL_AD
+    assert labelled[0]["b4_agreement"] == "agree"
 
 
 def test_radiomic_features_are_preserved(policy: LabelPolicy) -> None:
@@ -154,10 +175,15 @@ def test_progression_uses_only_the_same_subjects_visits(mci_policy: LabelPolicy)
     assert rows[0]["conversion_event"] is None
 
 
-def test_shipped_policy_yields_no_progression_candidates(policy: LabelPolicy) -> None:
-    """v1.0 has no MCI class, so Target B is empty by construction."""
+def test_shipped_policy_now_yields_progression_candidates(policy: LabelPolicy) -> None:
+    """v2.0 resolves v1.0's blocker: D1 supplies an MCI class, so Target B runs."""
     sessions = build_session_labels([_session("S", 1000, "uncertain dementia")], policy)
-    assert build_progression_labels(sessions, [], policy, 1095) == []
+    assert sessions[0]["supervised_label"] == LABEL_MCI
+
+    visits = [{"subject_id": "S", "clinical_day": 2500, "MCIAMEM": "1"}]
+    rows = build_progression_labels(sessions, visits, policy, 1095)
+    assert len(rows) == 1
+    assert rows[0]["progression_label"] == "MCI_STABLE"
 
 
 # --- vocabulary audit ------------------------------------------------------
@@ -244,6 +270,12 @@ def test_audit_counts_sessions_and_subjects(policy: LabelPolicy) -> None:
     assert audit["training_eligible_subjects"] == 2
 
 
+def test_audit_records_the_b4_cross_check(policy: LabelPolicy) -> None:
+    rows = build_session_labels([_session("OAS30001", 100, "Cognitively normal")], policy)
+    audit = build_audit(rows, [], build_diagnosis_vocabulary(rows, policy), {})
+    assert audit["b4_agreement"]["agree"] == 1
+
+
 def test_audit_marks_dataset_not_final_without_mci(policy: LabelPolicy) -> None:
     rows = build_session_labels([_session("OAS30001", 100, "Cognitively normal")], policy)
     audit = build_audit(rows, [], build_diagnosis_vocabulary(rows, policy), {})
@@ -256,13 +288,15 @@ def test_build_supervised_datasets_writes_all_four(tmp_path: Path, policy: Label
     visits_csv = tmp_path / "visits.csv"
     sessions_csv.write_text(
         "subject_id,session_id,mri_day,clinical_day,clinical_mri_abs_gap_days,"
-        "clinical_match_valid,dx1,CDRTOT,original_glcm_Contrast_left\n"
-        "OAS30001,OAS30001_MR_d0100,100,110,10,True,Cognitively normal,0,1.5\n"
-        "OAS30002,OAS30002_MR_d0050,50,60,10,True,AD Dementia,1,1.7\n",
+        "clinical_match_valid,NORMCOG,DEMENTED,PROBAD,dx1,CDRTOT,"
+        "original_glcm_Contrast_left\n"
+        "OAS30001,OAS30001_MR_d0100,100,110,10,True,1,,,Cognitively normal,0,1.5\n"
+        "OAS30002,OAS30002_MR_d0050,50,60,10,True,,1,1,AD Dementia,1,1.7\n",
         encoding="utf-8",
     )
     visits_csv.write_text(
-        "subject_id,clinical_day,dx1\nOAS30001,110,Cognitively normal\n", encoding="utf-8"
+        "subject_id,clinical_day,NORMCOG,dx1\nOAS30001,110,1,Cognitively normal\n",
+        encoding="utf-8",
     )
 
     result, outputs = build_supervised_datasets(sessions_csv, visits_csv, tmp_path / "out", policy)

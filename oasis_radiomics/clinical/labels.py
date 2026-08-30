@@ -35,7 +35,7 @@ Guarantees
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -49,12 +49,19 @@ LABEL_MCI = "MCI"
 LABEL_AD = "AD"
 TRAINING_LABELS = (LABEL_CN, LABEL_MCI, LABEL_AD)
 
+LABEL_OTHER_DEMENTIA_D1 = "OTHER_DEMENTIA"
+LABEL_IMPAIRED_NOT_MCI = "IMPAIRED_NOT_MCI"
+LABEL_DEMENTIA_UNKNOWN_ETIOLOGY = "DEMENTIA_UNKNOWN_ETIOLOGY"
+LABEL_CONFLICTING = "CONFLICTING"
 LABEL_OTHER_DEMENTIA = "OTHER_DEMENTIA"
 LABEL_UNCERTAIN = "UNCERTAIN"
 LABEL_NON_DIAGNOSTIC = "NON_DIAGNOSTIC"
 LABEL_UNMAPPED = "UNMAPPED"
 LABEL_MISSING = "MISSING"
 ALL_LABELS = TRAINING_LABELS + (
+    LABEL_IMPAIRED_NOT_MCI,
+    LABEL_DEMENTIA_UNKNOWN_ETIOLOGY,
+    LABEL_CONFLICTING,
     LABEL_OTHER_DEMENTIA,
     LABEL_UNCERTAIN,
     LABEL_NON_DIAGNOSTIC,
@@ -68,6 +75,32 @@ PROGRESSION_STABLE = "MCI_STABLE"
 PROGRESSION_CENSORED = "CENSORED"
 
 # --- statuses and exclusion reasons ----------------------------------------
+#: D1-derived cognitive states, in the order the policy evaluates them.
+STATE_DEMENTIA = "DEMENTIA"
+STATE_MCI = "MCI"
+STATE_IMPAIRED_NOT_MCI = "IMPAIRED_NOT_MCI"
+STATE_CN = "CN"
+
+ETIOLOGY_AD = "AD"
+ETIOLOGY_NON_AD = "NON_AD"
+ETIOLOGY_MIXED = "MIXED"
+ETIOLOGY_UNKNOWN = "UNKNOWN"
+
+#: Role a flagged aetiology plays, from the paired NACC "IF" field. Its domain
+#: is {0, 1, 2} - NOT binary: 1 = primary cause, 2 = contributing cause.
+ROLE_PRIMARY = "primary"
+ROLE_CONTRIBUTING = "contributing"
+ROLE_UNSPECIFIED = "unspecified"
+ROLE_CODES = {"1": ROLE_PRIMARY, "2": ROLE_CONTRIBUTING}
+
+SOURCE_D1 = "D1"
+SOURCE_D1_B4 = "D1+B4"
+
+AGREEMENT_AGREE = "agree"
+AGREEMENT_DISAGREE = "disagree"
+AGREEMENT_UNAVAILABLE = "b4_unavailable"
+AGREEMENT_NOT_COMPARABLE = "not_comparable"
+
 STATUS_LABELLED = "labelled"
 STATUS_CONFLICTING = "conflicting"
 STATUS_UNMAPPED = "unmapped"
@@ -80,6 +113,10 @@ EXCLUSION_OTHER_DEMENTIA = "other_dementia"
 EXCLUSION_CONFLICTING = "conflicting_diagnosis"
 EXCLUSION_MISSING = "missing_diagnosis"
 EXCLUSION_NON_DIAGNOSTIC = "non_diagnostic_value"
+EXCLUSION_OTHER_DEMENTIA_D1 = "other_dementia"
+EXCLUSION_IMPAIRED_NOT_MCI = "impaired_not_mci"
+EXCLUSION_DEMENTIA_UNKNOWN_ETIOLOGY = "dementia_unknown_etiology"
+EXCLUSION_MIXED_ETIOLOGY = "mixed_etiology"
 
 #: Columns that encode information from *after* the scan. They may define y and
 #: must never be handed to a model as x. Enforced by :func:`leaking_columns`.
@@ -154,6 +191,22 @@ class SupervisedLabel:
     policy_version: str | None = None
     raw_value: str | None = None
     normalized_value: str | None = None
+    #: D1 aetiology behind the label: AD / NON_AD / MIXED / UNKNOWN. Kept
+    #: separate so "MCI due to AD" stays visible even though it collapses into
+    #: the MCI label.
+    etiology: str = ETIOLOGY_UNKNOWN
+    #: Role the AD aetiology plays: primary / contributing / unspecified.
+    ad_etiology_role: str | None = None
+    #: MCI subtype from the D1 qualifier fields, e.g. amnestic_multi_domain.
+    mci_subtype: str | None = None
+    #: Impaired cognitive domains recorded alongside the MCI subtype.
+    mci_domains: str | None = None
+    #: Independent comparison label derived from B4 dx1.
+    b4_label: str | None = None
+    #: Outcome of the auxiliary B4 cross-check.
+    b4_agreement: str = AGREEMENT_NOT_COMPARABLE
+    #: Why D1 and B4 disagree, when they do.
+    b4_disagreement_reason: str | None = None
 
     @property
     def is_training_label(self) -> bool:
@@ -171,6 +224,13 @@ class SupervisedLabel:
             "label_reason": self.reason,
             "label_policy_version": self.policy_version,
             "dx1_normalized": self.normalized_value,
+            "ad_etiology": self.etiology,
+            "ad_etiology_role": self.ad_etiology_role,
+            "mci_subtype": self.mci_subtype,
+            "mci_domains": self.mci_domains,
+            "b4_label": self.b4_label,
+            "b4_agreement": self.b4_agreement,
+            "b4_disagreement_reason": self.b4_disagreement_reason,
         }
 
 
@@ -227,10 +287,35 @@ class LabelPolicy:
     cn_max_cdrtot: float | None = 0.0
     ad_min_cdrtot: float | None = 0.5
     source_path: Path | None = None
+    #: "D1" (v2.0 default) or "B4" (v1.0 behaviour).
+    primary_source: str = "D1"
+    #: cognitive state -> (rule_id, (variable, ...)), in evaluation order.
+    d1_states: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+    #: aetiology -> (rule_id, (variable, ...)).
+    d1_etiologies: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+    d1_truth_value: str = "1"
+    #: AD flag -> its paired "IF" role qualifier, e.g. ``{"PROBAD": "PROBADIF"}``.
+    d1_role_qualifiers: Mapping[str, str] = field(default_factory=dict)
+    #: Which aetiology roles admit a demented visit into the AD class.
+    ad_roles_accepted: tuple[str, ...] = (ROLE_PRIMARY, ROLE_UNSPECIFIED)
+    #: MCI core indicator -> {"label": subtype, "domains": {var: domain}}.
+    d1_mci_subtypes: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    label_composition: Mapping[str, str] = field(default_factory=dict)
+    training_labels: tuple[str, ...] = TRAINING_LABELS
+    b4_validation_enabled: bool = True
+    b4_concordance: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    multiple_states_conflict: bool = True
+    mixed_etiology_excluded: bool = True
 
     @property
     def defines_mci(self) -> bool:
-        """Whether the policy assigns MCI to any string at all."""
+        """Whether the policy can produce an MCI label at all.
+
+        Under ``primary_source: D1`` this asks whether the D1 MCI variables are
+        configured; under B4 it asks whether any dx1 string maps to MCI.
+        """
+        if self.primary_source == "D1":
+            return any(name == STATE_MCI and variables for name, _, variables in self.d1_states)
         return any(label == LABEL_MCI for label, _ in self.primary_map.values())
 
     # -- construction ------------------------------------------------------
@@ -283,7 +368,59 @@ class LabelPolicy:
 
         conflict = raw.get("conflict_policy") or {}
         checks = raw.get("consistency_checks") or {}
+
+        states_block = raw.get("d1_cognitive_status") or {}
+        truth = str(states_block.get("truth_value", "1"))
+        d1_states = tuple(
+            (name, str((states_block[name] or {}).get("rule_id") or f"d1_{name.lower()}"),
+             tuple((states_block[name] or {}).get("any_of") or ()))
+            for name in (STATE_DEMENTIA, STATE_MCI, STATE_IMPAIRED_NOT_MCI, STATE_CN)
+            if isinstance(states_block.get(name), Mapping)
+        )
+        etiology_block = raw.get("d1_ad_etiology") or {}
+        d1_etiologies = tuple(
+            (name, str((etiology_block[name] or {}).get("rule_id") or f"d1_{name.lower()}"),
+             tuple((etiology_block[name] or {}).get("any_of") or ()))
+            for name in (ETIOLOGY_AD, ETIOLOGY_NON_AD)
+            if isinstance(etiology_block.get(name), Mapping)
+        )
+        ad_block = etiology_block.get(ETIOLOGY_AD) or {}
+        d1_role_qualifiers = {
+            str(flag): str(qualifier)
+            for flag, qualifier in (ad_block.get("role_qualifiers") or {}).items()
+        }
+        ad_roles_accepted = tuple(
+            str(role) for role in (raw.get("ad_etiology_roles_accepted") or [ROLE_PRIMARY, ROLE_UNSPECIFIED])
+        )
+        mci_block = states_block.get(STATE_MCI) or {}
+        d1_mci_subtypes = {
+            str(core): dict(spec or {})
+            for core, spec in (mci_block.get("subtypes") or {}).items()
+        }
+        validation = raw.get("b4_validation") or {}
+        primary_source = str(raw.get("primary_source") or "B4").upper()
+        if primary_source == "D1" and not d1_states:
+            raise LabelPolicyError(
+                "primary_source is D1 but the policy defines no d1_cognitive_status rules."
+            )
+
         return cls(
+            primary_source=primary_source,
+            d1_states=d1_states,
+            d1_etiologies=d1_etiologies,
+            d1_truth_value=truth,
+            d1_role_qualifiers=d1_role_qualifiers,
+            ad_roles_accepted=ad_roles_accepted,
+            d1_mci_subtypes=d1_mci_subtypes,
+            label_composition=dict(raw.get("label_composition") or {}),
+            training_labels=tuple(raw.get("training_labels") or TRAINING_LABELS),
+            b4_validation_enabled=bool(validation.get("enabled", True)),
+            b4_concordance={
+                str(key): tuple(value or ())
+                for key, value in (validation.get("concordance") or {}).items()
+            },
+            multiple_states_conflict=bool(conflict.get("multiple_cognitive_states_conflict", True)),
+            mixed_etiology_excluded=bool(conflict.get("mixed_etiology_excluded", True)),
             version=version,
             primary_column=str(raw.get("primary_column") or "dx1"),
             secondary_columns=tuple(raw.get("secondary_columns") or ("dx2", "dx3", "dx4", "dx5")),
@@ -391,16 +528,309 @@ def _optional_float(value: Any) -> float | None:
 
 
 # ---------------------------------------------------------------------------
+# D1: the primary label source (v2.0)
+# ---------------------------------------------------------------------------
+def _d1_flag(row: Mapping[str, Any], variable: str, truth: str) -> bool | None:
+    """Whether ``variable`` is set in ``row``.
+
+    Returns ``None`` when the cell is blank (a NACC skip pattern) **or** carries
+    a value outside ``{truth, "0"}``. D1 contains three such cells
+    (``DEMENTED=2`` once, ``IMPNOMCI=2`` twice); they are reported as unusable
+    rather than guessed at.
+    """
+    raw = row.get(variable)
+    if raw is None or (isinstance(raw, float) and raw != raw):
+        return None
+    text = str(raw).strip()
+    if text in ("", "."):
+        return None
+    if text == truth:
+        return True
+    if text in ("0", "0.0"):
+        return False
+    try:  # pandas turns "1" into 1.0
+        number = float(text)
+    except ValueError:
+        return None
+    if number == float(truth):
+        return True
+    return False if number == 0 else None
+
+
+def derive_d1_cognitive_state(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[list[str], list[str]]:
+    """Cognitive states asserted by D1 for one visit.
+
+    Returns ``(states, rule_ids)``. More than one state means the form
+    contradicts itself; the caller reports that rather than applying a priority
+    order (14 OASIS-3 visits are affected).
+    """
+    states: list[str] = []
+    rules: list[str] = []
+    for name, rule_id, variables in policy.d1_states:
+        if any(_d1_flag(row, variable, policy.d1_truth_value) for variable in variables):
+            states.append(name)
+            rules.append(rule_id)
+    return states, rules
+
+
+def etiology_role(row: Mapping[str, Any], flag: str, policy: LabelPolicy) -> str | None:
+    """Role the aetiology ``flag`` plays, from its paired NACC "IF" field.
+
+    The "IF" domain is ``{0, 1, 2}``, **not** binary: 1 means the aetiology is
+    the primary cause, 2 means it merely contributes. A blank field leaves the
+    role ``unspecified``; a value outside the domain is reported as unspecified
+    rather than guessed at.
+
+    Returns ``None`` when the flag itself is not set.
+    """
+    if not _d1_flag(row, flag, policy.d1_truth_value):
+        return None
+    qualifier = policy.d1_role_qualifiers.get(flag)
+    if not qualifier:
+        return ROLE_UNSPECIFIED
+    raw = row.get(qualifier)
+    if raw is None or (isinstance(raw, float) and raw != raw):
+        return ROLE_UNSPECIFIED
+    text = str(raw).strip()
+    if text.endswith(".0"):
+        text = text[:-2]
+    return ROLE_CODES.get(text, ROLE_UNSPECIFIED)
+
+
+def derive_d1_etiology(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[str, str | None]:
+    """AD / NON_AD / MIXED / UNKNOWN aetiology asserted by D1.
+
+    Applies to MCI as well as dementia: D1 records aetiology for both, so "MCI
+    due to AD" is expressible. The two form generations are handled together as
+    version-dependent representations of one concept - UDS v1/v2
+    ``PROBAD``/``POSSAD`` and UDS v3 ``alzdis`` are disjoint in OASIS-3 and
+    neither is required to exist.
+
+    An AD flag only counts when its role is in ``policy.ad_roles_accepted``.
+    By default a *contributing* AD aetiology (``IF == 2``) does not make the
+    visit AD: AD is present but is not the primary cause, exactly like the B4
+    string "AD dem cannot be primary".
+
+    Returns
+    -------
+    tuple
+        ``(etiology, ad_role)``; ``ad_role`` is ``None`` when no AD flag is set.
+    """
+    ad_roles = [
+        role
+        for name, _, variables in policy.d1_etiologies
+        if name == ETIOLOGY_AD
+        for variable in variables
+        for role in (etiology_role(row, variable, policy),)
+        if role is not None
+    ]
+    has_non_ad = any(
+        _d1_flag(row, variable, policy.d1_truth_value)
+        for name, _, variables in policy.d1_etiologies
+        if name == ETIOLOGY_NON_AD
+        for variable in variables
+    )
+
+    ad_role = _dominant_role(ad_roles)
+    has_ad = any(role in policy.ad_roles_accepted for role in ad_roles)
+
+    if has_ad and has_non_ad:
+        return ETIOLOGY_MIXED, ad_role
+    if has_ad:
+        return ETIOLOGY_AD, ad_role
+    if has_non_ad:
+        return ETIOLOGY_NON_AD, ad_role
+    return ETIOLOGY_UNKNOWN, ad_role
+
+
+def _dominant_role(roles: Sequence[str]) -> str | None:
+    """Strongest role among several AD flags: primary > unspecified > contributing."""
+    for role in (ROLE_PRIMARY, ROLE_UNSPECIFIED, ROLE_CONTRIBUTING):
+        if role in roles:
+            return role
+    return None
+
+
+def derive_mci_subtype(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[str | None, tuple[str, ...]]:
+    """MCI subtype and impaired domains from the D1 qualifier fields.
+
+    The four core indicators decide *whether* a visit is MCI; these companion
+    fields describe *which kind*. They never change the label, and orphaned
+    qualifiers (a domain set without its core indicator) are ignored here and
+    reported by validation.
+
+    Returns ``(subtype, domains)``, both empty when no core indicator is set.
+    """
+    for core, spec in policy.d1_mci_subtypes.items():
+        if not _d1_flag(row, core, policy.d1_truth_value):
+            continue
+        domains = tuple(
+            sorted(
+                name
+                for variable, name in (spec.get("domains") or {}).items()
+                if _d1_flag(row, variable, policy.d1_truth_value)
+            )
+        )
+        return str(spec.get("label") or core), domains
+    return None, ()
+
+
+def compose_label(state: str, etiology: str, policy: LabelPolicy) -> str:
+    """Combine a cognitive state and an aetiology into the supervised label."""
+    composition = policy.label_composition
+    for key in (f"{state}+{etiology}", state):
+        if key in composition:
+            return str(composition[key])
+    return state
+
+
+def derive_d1_label(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[SupervisedLabel, str]:
+    """Derive the Target-A label for one visit from D1.
+
+    Returns ``(label, etiology)``. The aetiology is surfaced separately so that
+    "MCI due to AD" and "dementia of mixed aetiology" remain visible in the
+    output even though they collapse into one label.
+    """
+    states, rules = derive_d1_cognitive_state(row, policy)
+
+    if not states:
+        return (
+            SupervisedLabel(
+                label=LABEL_MISSING,
+                source=SOURCE_D1,
+                rule_id="d1_no_cognitive_status",
+                confidence="none",
+                reason=(
+                    "No D1 cognitive-status variable is set for the linked visit "
+                    "(blank form or an out-of-range value)."
+                ),
+                status=STATUS_MISSING,
+                policy_version=policy.version,
+            ),
+            ETIOLOGY_UNKNOWN,
+        )
+
+    etiology, ad_role = derive_d1_etiology(row, policy)
+
+    if len(states) > 1 and policy.multiple_states_conflict:
+        return (
+            SupervisedLabel(
+                label=LABEL_CONFLICTING,
+                source=SOURCE_D1,
+                rule_id="d1_multiple_cognitive_states",
+                confidence="none",
+                reason=(
+                    f"D1 asserts several cognitive states at once: {sorted(states)}. "
+                    "Reported, not resolved by priority."
+                ),
+                status=STATUS_CONFLICTING,
+                policy_version=policy.version,
+            ),
+            etiology,
+        )
+
+    state = states[0]
+    label = compose_label(state, etiology, policy)
+    subtype, domains = derive_mci_subtype(row, policy)
+
+    reason = f"D1 {state} via {rules[0]}"
+    if state in (STATE_DEMENTIA, STATE_MCI):
+        reason = f"{reason}; aetiology {etiology}"
+        if ad_role:
+            reason = f"{reason} (role {ad_role})"
+    if subtype:
+        reason = f"{reason}; subtype {subtype}" + (
+            f" [{', '.join(domains)}]" if domains else ""
+        )
+
+    return (
+        SupervisedLabel(
+            label=label,
+            source=SOURCE_D1,
+            rule_id=rules[0],
+            confidence="high" if etiology != ETIOLOGY_MIXED else "low",
+            reason=reason,
+            status=STATUS_LABELLED,
+            policy_version=policy.version,
+            ad_etiology_role=ad_role,
+            mci_subtype=subtype,
+            mci_domains=", ".join(domains) or None,
+        ),
+        etiology,
+    )
+
+
+def derive_b4_comparison_label(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> str | None:
+    """Independent comparison label from the B4 ``dx1`` free text.
+
+    Derived on its own terms, with no knowledge of the D1 label, so the
+    cross-check is genuinely independent. ``None`` when B4 records nothing.
+    """
+    matched = policy.lookup_primary(row.get(policy.primary_column))
+    if matched is not None:
+        return matched[0]
+    return LABEL_UNMAPPED if policy.normalise(row.get(policy.primary_column)) else None
+
+
+def validate_against_b4(
+    label: SupervisedLabel, row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[str | None, str, str | None]:
+    """Cross-check a D1 label against the independent B4 free text.
+
+    B4 never assigns or overrides a label: this only populates ``b4_label``,
+    ``b4_agreement`` and ``b4_disagreement_reason`` so systematic disagreement
+    stays visible and auditable.
+
+    Returns ``(b4_label, agreement, disagreement_reason)``.
+    """
+    if not policy.b4_validation_enabled:
+        return None, AGREEMENT_NOT_COMPARABLE, None
+
+    b4_label = derive_b4_comparison_label(row, policy)
+    if b4_label is None:
+        return None, AGREEMENT_UNAVAILABLE, None
+    if b4_label == LABEL_UNMAPPED:
+        return b4_label, AGREEMENT_NOT_COMPARABLE, "B4 dx1 is not enumerated by the policy"
+
+    concordant = policy.b4_concordance.get(b4_label)
+    if concordant is None:
+        return b4_label, AGREEMENT_NOT_COMPARABLE, f"B4={b4_label} has no concordance entry"
+    if not concordant:
+        return b4_label, AGREEMENT_NOT_COMPARABLE, f"B4={b4_label} is not a diagnosis"
+    if label.label in concordant:
+        return b4_label, AGREEMENT_AGREE, None
+    return (
+        b4_label,
+        AGREEMENT_DISAGREE,
+        f"D1={label.label} is not concordant with B4={b4_label}",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Target A: current clinical state
 # ---------------------------------------------------------------------------
 def derive_current_label(
     row: Mapping[str, Any], policy: LabelPolicy
 ) -> tuple[SupervisedLabel, list[str]]:
-    """Derive the CN/MCI/AD label for one MRI session.
+    """Derive the Target-A label for one MRI session.
 
-    Driven by ``dx1``. Secondary diagnoses never promote a session into a class
-    (``secondary_ad_promotes_primary`` is false by design); they can only raise
-    a conflict.
+    Dispatches on ``policy.primary_source``:
+
+    ``D1`` (v2.0 default)
+        the D1 diagnosis form decides, and the B4 free text is used only as a
+        cross-check recorded in ``b4_agreement``;
+    ``B4`` (v1.0 behaviour)
+        the ``dx1`` free text decides.
 
     Returns
     -------
@@ -408,6 +838,46 @@ def derive_current_label(
         ``(label, warnings)``. Warnings are consistency findings such as
         ``diagnosis_cdr_disagreement``; they never alter the label.
     """
+    if policy.primary_source == "D1":
+        return _derive_from_d1(row, policy)
+    return _derive_from_b4(row, policy)
+
+
+def _derive_from_d1(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[SupervisedLabel, list[str]]:
+    """D1-primary derivation, with the B4 text as an auxiliary cross-check."""
+    label, etiology = derive_d1_label(row, policy)
+    b4_label, agreement, detail = validate_against_b4(label, row, policy)
+
+    warnings = _consistency_warnings(label.label, row, policy)
+    if agreement == AGREEMENT_DISAGREE and detail:
+        warnings.append(f"d1_b4_disagreement({detail})")
+
+    enriched = replace(
+        label,
+        source=SOURCE_D1_B4 if agreement in (AGREEMENT_AGREE, AGREEMENT_DISAGREE) else SOURCE_D1,
+        raw_value=_optional_str(row.get(policy.primary_column)),
+        normalized_value=policy.normalise(row.get(policy.primary_column)),
+        etiology=etiology,
+        b4_label=b4_label,
+        b4_agreement=agreement,
+        b4_disagreement_reason=detail if agreement == AGREEMENT_DISAGREE else None,
+        reason=f"{label.reason}; B4 cross-check: {agreement}"
+        + (f" ({detail})" if detail else ""),
+    )
+    return enriched, warnings
+
+
+def _optional_str(value: Any) -> str | None:
+    """String form of a raw value, or ``None`` when it means "absent"."""
+    return None if normalise_diagnosis(value) is None else str(value)
+
+
+def _derive_from_b4(
+    row: Mapping[str, Any], policy: LabelPolicy
+) -> tuple[SupervisedLabel, list[str]]:
+    """v1.0 behaviour: the B4 free text decides the label."""
     raw = row.get(policy.primary_column)
     normalized = policy.normalise(raw)
 
@@ -533,6 +1003,7 @@ def training_eligibility(
     clinical_match_valid: bool,
     abs_gap_days: float | None,
     window_days: int,
+    training_labels: Sequence[str] | None = None,
 ) -> tuple[bool, str | None]:
     """Whether a session may enter the default CN/MCI/AD training cohort.
 
@@ -555,11 +1026,14 @@ def training_eligibility(
         LABEL_OTHER_DEMENTIA: EXCLUSION_OTHER_DEMENTIA,
         LABEL_UNCERTAIN: EXCLUSION_UNCERTAIN,
         LABEL_NON_DIAGNOSTIC: EXCLUSION_NON_DIAGNOSTIC,
+        LABEL_IMPAIRED_NOT_MCI: EXCLUSION_IMPAIRED_NOT_MCI,
+        LABEL_DEMENTIA_UNKNOWN_ETIOLOGY: EXCLUSION_DEMENTIA_UNKNOWN_ETIOLOGY,
+        LABEL_CONFLICTING: EXCLUSION_CONFLICTING,
     }
     if label.label in reasons:
         return False, reasons[label.label]
 
-    if label.label in TRAINING_LABELS:
+    if label.label in (training_labels or TRAINING_LABELS):
         return True, None
     return False, EXCLUSION_UNMAPPED
 
@@ -637,8 +1111,7 @@ def derive_progression_label(
         day = _visit_day(visit)
         if day > deadline:
             break
-        matched = policy.lookup_primary(visit.get(policy.primary_column))
-        if matched is not None and matched[0] == LABEL_AD:
+        if _visit_label(visit, policy) == LABEL_AD:
             return ProgressionLabel(
                 label=PROGRESSION_TO_AD,
                 eligible=True,
@@ -661,8 +1134,7 @@ def derive_progression_label(
             _visit_day(visit)
             for visit in later
             if _visit_day(visit) >= deadline
-            and (policy.lookup_primary(visit.get(policy.primary_column)) or ("", ""))[0]
-            != LABEL_AD
+            and _visit_label(visit, policy) != LABEL_AD
         ),
         None,
     )
@@ -693,6 +1165,16 @@ def derive_progression_label(
             f"{last_day}). Outcome unobserved - censored, not stable."
         ),
     )
+
+
+def _visit_label(visit: Mapping[str, Any], policy: LabelPolicy) -> str:
+    """Target-A label of a clinical visit, under the policy's primary source.
+
+    Target B must read future visits with the same instrument that produced the
+    label at the scan, or the outcome would be defined on a different scale from
+    the exposure.
+    """
+    return derive_current_label(visit, policy)[0].label
 
 
 def _visit_day(visit: Mapping[str, Any]) -> int:

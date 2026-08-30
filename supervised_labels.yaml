@@ -1,83 +1,193 @@
 # ===========================================================================
-# OASIS-3 supervised label policy
+# OASIS-3 supervised label policy - v2.0
 # ===========================================================================
-# Versioned, auditable mapping from the OASIS-3 B4 free-text diagnoses
-# (dx1..dx5) onto supervised-learning labels.
+# PRIMARY SOURCE: the D1 diagnosis form (OASIS3_UDSd1_diagnoses.csv).
+# B4 free text is retained as AUXILIARY VALIDATION only.
 #
-# This file is INDEPENDENT of clinical_classification.yaml. That file governs
-# the D1 *numeric* codebook, whose semantics are not documented in this
-# repository and therefore remain unfrozen. This file governs the B4 *textual*
-# diagnoses, which are clinically readable, and is frozen and versioned on its
-# own terms.
+# Why D1 is now primary (changed in v2.0)
+# ---------------------------------------
+# v1.0 labelled from the B4 free text and found that B4 dx1..dx5 carries NO MCI
+# label, leaving the MCI class and the whole MCI->AD target empty. D1 does carry
+# explicit MCI variables (MCIAMEM, MCIAPLUS, MCINON1, MCINON2) and an explicit
+# aetiology block, so it can express the full CN / MCI / AD-dementia /
+# non-AD-dementia / impaired-not-MCI taxonomy that B4 cannot.
 #
-# EVERY string observed in the source is enumerated below. A string that is not
-# listed becomes UNMAPPED and is excluded from training - there is no fallback
-# and no substring matching, so a new OASIS release cannot silently acquire a
-# label. Substring rules such as `if "AD" in dx1` are deliberately NOT used:
-# "AD dem cannot be primary" contains "AD" but explicitly means AD is NOT the
-# primary etiology.
+# The D1 coding is NOT assumed - it is EMPIRICALLY VALIDATED against the
+# independent B4 free text over the 8475 visits that carry both instruments.
+# Agreement of each `== 1` flag with the v1.0 B4 text mapping:
 #
-# Vocabulary enumerated from diagnostic/OASIS3_UDSb4_cdr.csv (8626 rows,
-# 1378 subjects): 53 distinct dx1 values, all mapped.
+#     NORMCOG   n=5785   99.7% CN
+#     DEMENTED  n=1371   92.6% dementia (AD + non-AD)
+#     MCIAMEM   n=  83   86.7% B4 "uncertain" family
+#     MCIAPLUS  n= 115   68.7% B4 "uncertain" family
+#     IMPNOMCI  n= 255   91.4% B4 "uncertain" family
+#     PROBAD    n= 643   98.1% AD
+#     alzdis    n= 520   95.8% AD
+#     FTD       n=   9  100.0% non-AD dementia
+#
+# This closes the v1.0 finding: the B4 "uncertain dementia" family that v1.0
+# refused to call MCI is precisely what D1 codes as MCI / impaired-not-MCI.
+#
+# Values are binary. Anything outside {0, 1} is treated as unusable, never
+# guessed: D1 contains three such cells (DEMENTED=2 once, IMPNOMCI=2 twice).
 # ===========================================================================
 
-version: "oasis3-supervised-labels-v1.0"
+version: "oasis3-supervised-labels-v2.1"
 policy_id: SUPERVISED_LABEL_POLICY
-source: "OASIS3_UDSb4_cdr.csv dx1..dx5 (free-text clinical diagnosis)"
+primary_source: D1
+source: >-
+  OASIS3_UDSd1_diagnoses.csv (primary) validated against
+  OASIS3_UDSb4_cdr.csv dx1..dx5 (auxiliary)
 
-# Comparison is exact after normalisation. The ORIGINAL string is always
-# preserved in the outputs; normalisation only affects matching.
 normalization:
   strip: true
   collapse_whitespace: true
   case_insensitive: true
 
-primary_column: dx1
+primary_column: dx1          # B4 column used for the auxiliary cross-check
 secondary_columns: [dx2, dx3, dx4, dx5]
 
 # ---------------------------------------------------------------------------
-# Primary label, driven by dx1
+# D1 cognitive status
 # ---------------------------------------------------------------------------
+# Evaluated in the order given. The first block whose `any_of` variable equals
+# "1" wins. Every block that fires is recorded, so two firing blocks produce
+# CONFLICTING rather than a silent priority win (14 visits in OASIS-3).
+d1_cognitive_status:
+  truth_value: "1"
+  false_value: "0"
+
+  DEMENTIA:
+    rule_id: d1_demented
+    any_of: [DEMENTED]
+    reference: "D1 DEMENTED==1; 92.6% agreement with B4 dementia text (n=1371)."
+
+  MCI:
+    rule_id: d1_mci_any
+    any_of: [MCIAMEM, MCIAPLUS, MCINON1, MCINON2]
+    reference: >-
+      NACC UDS amnestic (MCIAMEM, MCIAPLUS) and non-amnestic (MCINON1,
+      MCINON2) MCI flags. 77-87% fall in the B4 "uncertain" family, which
+      carries no MCI text of its own.
+    # Domain qualifiers that accompany each core indicator. They describe the
+    # subtype; they never decide whether the visit is MCI. Recorded in
+    # `mci_subtype` and `mci_domains` so the subtype survives into the outputs.
+    subtypes:
+      MCIAMEM:  {label: amnestic_single_domain, domains: []}
+      MCIAPLUS: {label: amnestic_multi_domain,
+                 domains: {MCIAPLAN: language, MCIAPATT: attention,
+                           MCIAPEX: executive, MCIAPVIS: visuospatial}}
+      MCINON1:  {label: non_amnestic_single_domain,
+                 domains: {MCIN1LAN: language, MCIN1ATT: attention,
+                           MCIN1EX: executive, MCIN1VIS: visuospatial}}
+      MCINON2:  {label: non_amnestic_multi_domain,
+                 domains: {MCIN2LAN: language, MCIN2ATT: attention,
+                           MCIN2EX: executive, MCIN2VIS: visuospatial}}
+
+  IMPAIRED_NOT_MCI:
+    rule_id: d1_impaired_no_mci
+    any_of: [IMPNOMCI]
+    reference: >-
+      D1 IMPNOMCI==1, cognitively impaired but not meeting MCI criteria.
+      91.4% fall in the B4 "uncertain" family (n=255).
+
+  CN:
+    rule_id: d1_normcog
+    any_of: [NORMCOG]
+    reference: "D1 NORMCOG==1; 99.7% agreement with B4 'Cognitively normal' (n=5785)."
+
+# ---------------------------------------------------------------------------
+# D1 aetiology
+# ---------------------------------------------------------------------------
+# Applies to DEMENTIA and to MCI alike: D1 records aetiology for both, so
+# "MCI due to AD" is expressible. The two form eras are disjoint in OASIS-3
+# (PROBAD/POSSAD filled on 800 demented visits, alzdis on 562, never both).
+d1_ad_etiology:
+  truth_value: "1"
+
+  AD:
+    rule_id: d1_ad_etiology
+    any_of: [PROBAD, POSSAD, alzdis]
+    reference: >-
+      UDS v1/v2 PROBAD/POSSAD (probable/possible AD) and UDS v3 alzdis
+      (Alzheimer's disease). The two generations are disjoint in OASIS-3 and
+      are version-dependent representations of the same concept; neither is
+      required to exist. 98.1% / 95.8% agreement with B4 AD text.
+    # The paired "IF" fields qualify the flag rather than repeating it. Their
+    # domain is {0, 1, 2}, NOT binary: 1 = primary aetiology, 2 = contributing.
+    # Observed in OASIS-3: PROBADIF 2 x9, POSSADIF 2 x39, alzdisif 2 x6.
+    role_qualifiers:
+      PROBAD: PROBADIF
+      POSSAD: POSSADIF
+      alzdis: alzdisif
+
+  NON_AD:
+    rule_id: d1_non_ad_etiology
+    any_of: [DLB, VASC, VASCPS, FTD, PPAPH, ALCDEM, DEMUN, PARK, HUNT, PRION, BRNINJ, HYCEPH, NEOP]
+    reference: >-
+      Non-Alzheimer aetiologies: Lewy body, vascular, frontotemporal,
+      primary progressive aphasia, alcohol-related, Parkinson, and other
+      documented causes. FTD==1 is 100% non-AD dementia in B4 (n=9).
+
+# When both an AD and a non-AD aetiology are flagged the aetiology is MIXED.
+# A mixed aetiology keeps the AD label but is recorded and excluded from the
+# default training cohort - see conflict_policy.
+mixed_etiology_label: MIXED
+
+# Which aetiology roles admit a demented visit into the AD class.
+# "primary"      the IF field says 1
+# "unspecified"  the flag is set but its IF field is blank
+# "contributing" the IF field says 2 - AD is present but is NOT the primary
+#                cause, so by default it does NOT make the visit AD, mirroring
+#                the exclusion of the B4 string "AD dem cannot be primary".
+ad_etiology_roles_accepted: [primary, unspecified]
+
+# ---------------------------------------------------------------------------
+# Final label composition
+# ---------------------------------------------------------------------------
+# cognitive_status x ad_etiology -> supervised_label
+label_composition:
+  CN: CN
+  MCI: MCI
+  IMPAIRED_NOT_MCI: IMPAIRED_NOT_MCI
+  DEMENTIA+AD: AD
+  DEMENTIA+NON_AD: OTHER_DEMENTIA
+  DEMENTIA+MIXED: OTHER_DEMENTIA
+  DEMENTIA+UNKNOWN: DEMENTIA_UNKNOWN_ETIOLOGY
+
+# Labels admitted to the default supervised training cohort.
+training_labels: [CN, MCI, AD]
+
+# ---------------------------------------------------------------------------
+# Auxiliary B4 validation
+# ---------------------------------------------------------------------------
+# The v1.0 text mapping, now used ONLY to cross-check the D1 label and to
+# populate `b4_agreement`. It never assigns or overrides a label.
+b4_validation:
+  enabled: true
+  # B4 label -> D1 labels considered concordant with it.
+  concordance:
+    CN: [CN]
+    AD: [AD, DEMENTIA_UNKNOWN_ETIOLOGY]
+    OTHER_DEMENTIA: [OTHER_DEMENTIA, DEMENTIA_UNKNOWN_ETIOLOGY]
+    UNCERTAIN: [MCI, IMPAIRED_NOT_MCI]
+    NON_DIAGNOSTIC: []
+
 current_state:
 
   CN:
     rule_id: cn_b4_dx1_exact
-    reference: "OASIS-3 B4 dx1 free text; both phrases state absence of dementia."
     dx1_exact:
       - Cognitively normal
       - No dementia
 
-  # -------------------------------------------------------------------------
-  # MCI IS INTENTIONALLY EMPTY. THIS IS THE CENTRAL FINDING OF v1.0.
-  #
-  # OASIS-3 B4 dx1..dx5 contains NO MCI label: no value anywhere in the file
-  # matches /\bMCI\b/ or "mild cognitive". The MCI-like categories are the
-  # WashU/ADRC "uncertain" family, listed under excluded.UNCERTAIN below
-  # (630 B4 rows). Mapping any of them to MCI is a clinical decision this
-  # repository is not entitled to make on its own, so they are classified
-  # UNCERTAIN and excluded from training.
-  #
-  # CONSEQUENCE: with this policy the MCI class is empty and the MCI->AD
-  # progression target has zero candidates. That is a real property of the
-  # data under an honest policy, not a pipeline failure.
-  #
-  # To define MCI, move the chosen strings from excluded.UNCERTAIN.dx1_exact
-  # into MCI.dx1_exact, add a `reference` justifying each, and bump `version`.
-  # See mci_candidates_pending_review below and SUPERVISED_LABELING_PROTOCOL.md.
-  # -------------------------------------------------------------------------
   MCI:
     rule_id: mci_b4_dx1_exact
-    reference: "NOT DEFINED - see the note above."
+    reference: "B4 carries no MCI text; MCI now comes from D1."
     dx1_exact: []
 
   AD:
     rule_id: ad_b4_dx1_exact
-    reference: >-
-      NACC/ADRC AD-dementia primary categories. "DAT" (Dementia of the
-      Alzheimer Type) is the WashU ADRC synonym for AD dementia and is
-      included. "AD dem cannot be primary" is deliberately EXCLUDED and
-      classified OTHER_DEMENTIA: it states that AD is present but is not the
-      primary etiology.
     dx1_exact:
       - AD Dementia
       - DAT
@@ -112,17 +222,10 @@ current_state:
       - DAT distrubed social, prior
       - DAT distrubed social, after
 
-# ---------------------------------------------------------------------------
-# Mapped but excluded from the CN/MCI/AD training cohort
-# ---------------------------------------------------------------------------
 excluded:
 
   OTHER_DEMENTIA:
     rule_id: other_dementia_b4_dx1_exact
-    reference: >-
-      Non-Alzheimer dementia etiologies (Lewy body, vascular, frontotemporal,
-      Parkinson) plus "AD dem cannot be primary", where AD is present but not
-      primary. Never folded into the AD class.
     dx1_exact:
       - DLBD, primary
       - DLBD, secondary
@@ -140,10 +243,8 @@ excluded:
   UNCERTAIN:
     rule_id: uncertain_b4_dx1_exact
     reference: >-
-      WashU/ADRC "uncertain" and "incipient" categories. These are the MCI
-      CANDIDATES; they are NOT labelled MCI without an explicit clinical
-      decision. 471 of the 475 "uncertain dementia" rows carry CDRTOT=0.5,
-      which is consistent with MCI but is not itself a diagnosis.
+      The WashU/ADRC "uncertain" family. v2.0 no longer needs to decide what
+      these mean: D1 states MCI or impaired-not-MCI explicitly.
     dx1_exact:
       - uncertain dementia
       - 'Unc: ques. Impairment'
@@ -154,17 +255,9 @@ excluded:
 
   NON_DIAGNOSTIC:
     rule_id: non_diagnostic_token
-    reference: >-
-      Form artifacts, not diagnoses. "A"/"B" are the NACC list-A / list-B
-      selectors; "Q" is a single stray value.
     dx1_exact:
       - "Q"
 
-# ---------------------------------------------------------------------------
-# Secondary diagnoses (dx2..dx5)
-# ---------------------------------------------------------------------------
-# Used ONLY for conflict detection and audit. A secondary AD diagnosis never
-# promotes a session into the AD class - see conflict_policy.
 secondary:
 
   AD:
@@ -240,10 +333,8 @@ secondary:
   COMORBIDITY:
     rule_id: comorbidity_b4_secondary_exact
     reference: >-
-      Contributing medical/psychiatric conditions, not dementia diagnoses.
       NOTE: "other mental retarAD demion" is a corrupted string in the source
-      file - a find/replace turned "dat" into "AD dem" inside
-      "retardation". It is enumerated verbatim so it is matched, not dropped.
+      file - a find/replace turned "dat" into "AD dem" inside "retardation".
     values:
       - Active Affective disorder
       - Active Alcoholism
@@ -287,41 +378,17 @@ secondary:
       - "A"
       - "B"
 
-# ---------------------------------------------------------------------------
-# Conflict handling
-# ---------------------------------------------------------------------------
 conflict_policy:
-  # An AD diagnosis in dx2..dx5 does NOT override a non-AD dx1.
+  # Two D1 cognitive-status blocks firing at once -> CONFLICTING, not a
+  # priority win. 14 OASIS-3 visits are affected.
+  multiple_cognitive_states_conflict: true
+  # A mixed AD / non-AD aetiology is recorded and kept out of the cohort.
+  mixed_etiology_excluded: true
   secondary_ad_promotes_primary: false
-  # A CN primary with a dementia secondary is contradictory -> label_status=conflicting.
   flag_cn_with_dementia_secondary: true
-  # Non-AD dementia secondary alongside an AD primary -> flagged, label kept.
   flag_mixed_dementia_etiology: true
 
-# ---------------------------------------------------------------------------
-# CDR / MMSE consistency checks
-# ---------------------------------------------------------------------------
-# CDR and MMSE are covariates and cross-checks. They NEVER assign a label:
-# CDRTOT==0.5 does not mean MCI under this policy.
 consistency_checks:
   enabled: true
-  cn_max_cdrtot: 0.0        # CN with CDRTOT > 0 -> diagnosis_cdr_disagreement
-  ad_min_cdrtot: 0.5        # AD with CDRTOT < 0.5 -> diagnosis_cdr_disagreement
-
-# ---------------------------------------------------------------------------
-# MCI candidates awaiting clinical review - INACTIVE
-# ---------------------------------------------------------------------------
-# Documentation only; this block is never read by the code. It records which
-# strings a reviewer must rule on to populate current_state.MCI.
-mci_candidates_pending_review:
-  b4_row_counts:
-    "uncertain dementia": 475
-    "Unc: ques. Impairment": 80
-    "0.5 in memory only": 23
-    "Incipient demt PTP": 23
-    "uncertain, possible NON AD dem": 18
-    "Unc: impair reversible": 7
-  total_b4_rows: 626
-  note: >-
-    "Incipient Non-AD dem" (4 rows) is classified OTHER_DEMENTIA rather than an
-    MCI candidate, because it names a non-Alzheimer etiology.
+  cn_max_cdrtot: 0.0
+  ad_min_cdrtot: 0.5

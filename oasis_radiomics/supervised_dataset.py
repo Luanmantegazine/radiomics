@@ -28,6 +28,9 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import __version__
 from .clinical.labels import (
     ALL_LABELS,
+    LABEL_CONFLICTING,
+    LABEL_DEMENTIA_UNKNOWN_ETIOLOGY,
+    LABEL_IMPAIRED_NOT_MCI,
     FUTURE_INFORMATION_COLUMNS,
     LABEL_AD,
     LABEL_CN,
@@ -94,6 +97,13 @@ LABEL_COLUMNS = (
     "label_reason",
     "label_policy_version",
     "dx1_normalized",
+    "ad_etiology",
+    "ad_etiology_role",
+    "mci_subtype",
+    "mci_domains",
+    "b4_label",
+    "b4_agreement",
+    "b4_disagreement_reason",
     "label_warnings",
     "training_eligible",
     "training_exclusion_reason",
@@ -114,7 +124,9 @@ SESSIONS_LEADING_COLUMNS = (
     "clinical_day", "clinical_mri_gap_days", "clinical_match_valid",
     "supervised_label", "training_eligible", "training_exclusion_reason",
     "label_status", "label_source", "label_rule_id", "label_reason",
-    "label_policy_version",
+    "label_policy_version", "ad_etiology", "ad_etiology_role",
+    "mci_subtype", "mci_domains",
+    "b4_label", "b4_agreement", "b4_disagreement_reason",
     *DIAGNOSIS_COLUMNS,
     "CDRTOT", "CDRSUM", "MMSE", "age_at_mri", "sex", "scanner",
 )
@@ -216,6 +228,7 @@ def build_session_labels(
             clinical_match_valid=_as_bool(source.get("clinical_match_valid")),
             abs_gap_days=_as_float(source.get("clinical_mri_abs_gap_days")),
             window_days=window_days,
+            training_labels=policy.training_labels,
         )
 
         row = dict(source)
@@ -414,6 +427,8 @@ def build_audit(
         "MCI_sessions": by_label.get(LABEL_MCI, 0),
         "AD_sessions": by_label.get(LABEL_AD, 0),
         "other_dementia_sessions": by_label.get(LABEL_OTHER_DEMENTIA, 0),
+        "impaired_not_mci_sessions": by_label.get(LABEL_IMPAIRED_NOT_MCI, 0),
+        "dementia_unknown_etiology_sessions": by_label.get(LABEL_DEMENTIA_UNKNOWN_ETIOLOGY, 0),
         "uncertain_sessions": by_label.get(LABEL_UNCERTAIN, 0),
         "unmapped_sessions": by_label.get(LABEL_UNMAPPED, 0),
         "non_diagnostic_sessions": by_label.get(LABEL_NON_DIAGNOSTIC, 0),
@@ -421,10 +436,42 @@ def build_audit(
         "conflicting_sessions": sum(
             1 for row in session_rows if row.get("label_status") == STATUS_CONFLICTING
         ),
+        "b4_agreement": dict(
+            sorted(Counter(str(row.get("b4_agreement")) for row in session_rows).items())
+        ),
+        "ad_etiology": dict(
+            sorted(Counter(str(row.get("ad_etiology")) for row in session_rows).items())
+        ),
+        "ad_etiology_role": dict(
+            sorted(Counter(str(row.get("ad_etiology_role")) for row in session_rows).items())
+        ),
+        "mci_subtype": dict(
+            sorted(
+                Counter(
+                    str(row.get("mci_subtype"))
+                    for row in session_rows
+                    if row.get("mci_subtype")
+                ).items()
+            )
+        ),
+        "b4_disagreements": dict(
+            sorted(
+                Counter(
+                    f"D1={row.get('supervised_label')} vs B4={row.get('b4_label')}"
+                    for row in session_rows
+                    if row.get("b4_agreement") == "disagree"
+                ).items(),
+                key=lambda item: -item[1],
+            )
+        ),
         "CN_subjects": _subjects_with(session_rows, label_is(LABEL_CN)),
         "MCI_subjects": _subjects_with(session_rows, label_is(LABEL_MCI)),
         "AD_subjects": _subjects_with(session_rows, label_is(LABEL_AD)),
         "other_dementia_subjects": _subjects_with(session_rows, label_is(LABEL_OTHER_DEMENTIA)),
+        "impaired_not_mci_subjects": _subjects_with(session_rows, label_is(LABEL_IMPAIRED_NOT_MCI)),
+        "dementia_unknown_etiology_subjects": _subjects_with(
+            session_rows, label_is(LABEL_DEMENTIA_UNKNOWN_ETIOLOGY)
+        ),
         "uncertain_subjects": _subjects_with(session_rows, label_is(LABEL_UNCERTAIN)),
         "unmapped_subjects": _subjects_with(session_rows, label_is(LABEL_UNMAPPED)),
         "training_eligible_sessions": sum(
