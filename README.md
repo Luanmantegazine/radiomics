@@ -427,6 +427,82 @@ official dictionary, write the rules with a `reference` citation for each, and
 set `codebook_frozen: true`. An empty frozen codebook, an uncited rule, and a
 value outside the controlled vocabulary are all rejected.
 
+## Supervised labels
+
+A separately versioned layer turns the linked clinical information into
+supervised-learning targets. **No machine learning and no feature selection** -
+labels only. Full specification: **[`SUPERVISED_LABELING_PROTOCOL.md`](SUPERVISED_LABELING_PROTOCOL.md)**.
+
+Two targets, deliberately kept apart:
+
+```
+Target A   X(MRI)            ->  y in {CN, MCI, AD}
+Target B   X(MRI while MCI)  ->  y in {MCI_STABLE, MCI_TO_AD}   (+ CENSORED, excluded)
+```
+
+```bash
+python cli.py supervised-labels \
+  --clinical-radiomics dataset_full/clinical_radiomics_sessions.csv \
+  --clinical-visits clinical_results/clinical_visits.csv \
+  --label-policy supervised_labels.yaml \
+  --clinical-window-days 180 \
+  --progression-horizon-days 1095 \
+  --output supervised_dataset/
+```
+
+```
+supervised_dataset/
+├── supervised_radiomics_sessions.csv   Target A: one row per MRI + all features
+├── supervised_mci_progression.csv      Target B: MCI sessions + outcome
+├── diagnosis_vocabulary.csv            every dx1..dx5 string and its mapping
+└── supervised_label_audit.json         counts by session AND by subject
+```
+
+### Labels come from D1, validated against the B4 text
+
+`supervised_labels.yaml` v2.0 uses **D1 as the primary source** and keeps B4 as
+**auxiliary validation**. v1.0 labelled from B4 and found it carries no MCI
+label at all; D1 has explicit MCI variables and an aetiology block, so it
+expresses the full taxonomy:
+
+| D1 | label |
+|---|---|
+| `NORMCOG` | `CN` |
+| `MCIAMEM` / `MCIAPLUS` / `MCINON1` / `MCINON2` | `MCI` |
+| `IMPNOMCI` | `IMPAIRED_NOT_MCI` |
+| `DEMENTED` + `PROBAD`/`POSSAD`/`alzdis` | `AD` |
+| `DEMENTED` + `DLB`/`VASC`/`FTD`/… | `OTHER_DEMENTIA` |
+| `DEMENTED`, aetiology not established | `DEMENTIA_UNKNOWN_ETIOLOGY` |
+
+The D1 coding is **not assumed** - it is validated against the independent B4
+text over the 8475 visits carrying both instruments (`NORMCOG` 99.7 % CN,
+`DEMENTED` 92.6 % dementia, `PROBAD` 98.1 % AD, `FTD` 100 % non-AD). Every row
+records the outcome in `b4_agreement`; on the real cohort **93.4 %** agree.
+B4 never overrides D1 - a disagreement is warned, not applied.
+
+Values outside `{0, 1}` are never guessed (D1 has three such cells). Two
+cognitive states firing at once give `CONFLICTING`, not a priority win.
+
+Aetiology spans both UDS generations (`PROBAD`/`POSSAD` and `alzdis`), which are
+disjoint in OASIS-3. Their paired `…IF` qualifiers are **not** binary — domain
+`{0, 1, 2}`, where 2 means AD *contributes* rather than causes — so a
+contributing-only aetiology does not enter the `AD` class. MCI subtype and
+impaired domains are recorded in `mci_subtype` / `mci_domains`.
+
+CDR and MMSE remain covariates and cross-checks only. `CDRTOT == 0.5` does
+**not** mean MCI.
+
+### Two rules that must not be relaxed
+
+**`CENSORED` is not `MCI_STABLE`.** Stability requires a non-AD sighting at or
+after the horizon. A participant who leaves follow-up six months after an MCI
+scan has an unobserved outcome, not a stable one.
+
+**Split by `subject_id`, never by row.** One participant contributes several MRI
+sessions; row-wise splitting puts `OAS30001` in both train and test. Use
+`subject_groups(rows)` as `groups` for `GroupKFold`, and
+`assert_no_subject_leakage(train, test)` to verify.
+
 ## Tests
 
 ```bash

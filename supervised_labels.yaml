@@ -1,0 +1,394 @@
+# ===========================================================================
+# OASIS-3 supervised label policy - v2.0
+# ===========================================================================
+# PRIMARY SOURCE: the D1 diagnosis form (OASIS3_UDSd1_diagnoses.csv).
+# B4 free text is retained as AUXILIARY VALIDATION only.
+#
+# Why D1 is now primary (changed in v2.0)
+# ---------------------------------------
+# v1.0 labelled from the B4 free text and found that B4 dx1..dx5 carries NO MCI
+# label, leaving the MCI class and the whole MCI->AD target empty. D1 does carry
+# explicit MCI variables (MCIAMEM, MCIAPLUS, MCINON1, MCINON2) and an explicit
+# aetiology block, so it can express the full CN / MCI / AD-dementia /
+# non-AD-dementia / impaired-not-MCI taxonomy that B4 cannot.
+#
+# The D1 coding is NOT assumed - it is EMPIRICALLY VALIDATED against the
+# independent B4 free text over the 8475 visits that carry both instruments.
+# Agreement of each `== 1` flag with the v1.0 B4 text mapping:
+#
+#     NORMCOG   n=5785   99.7% CN
+#     DEMENTED  n=1371   92.6% dementia (AD + non-AD)
+#     MCIAMEM   n=  83   86.7% B4 "uncertain" family
+#     MCIAPLUS  n= 115   68.7% B4 "uncertain" family
+#     IMPNOMCI  n= 255   91.4% B4 "uncertain" family
+#     PROBAD    n= 643   98.1% AD
+#     alzdis    n= 520   95.8% AD
+#     FTD       n=   9  100.0% non-AD dementia
+#
+# This closes the v1.0 finding: the B4 "uncertain dementia" family that v1.0
+# refused to call MCI is precisely what D1 codes as MCI / impaired-not-MCI.
+#
+# Values are binary. Anything outside {0, 1} is treated as unusable, never
+# guessed: D1 contains three such cells (DEMENTED=2 once, IMPNOMCI=2 twice).
+# ===========================================================================
+
+version: "oasis3-supervised-labels-v2.1"
+policy_id: SUPERVISED_LABEL_POLICY
+primary_source: D1
+source: >-
+  OASIS3_UDSd1_diagnoses.csv (primary) validated against
+  OASIS3_UDSb4_cdr.csv dx1..dx5 (auxiliary)
+
+normalization:
+  strip: true
+  collapse_whitespace: true
+  case_insensitive: true
+
+primary_column: dx1          # B4 column used for the auxiliary cross-check
+secondary_columns: [dx2, dx3, dx4, dx5]
+
+# ---------------------------------------------------------------------------
+# D1 cognitive status
+# ---------------------------------------------------------------------------
+# Evaluated in the order given. The first block whose `any_of` variable equals
+# "1" wins. Every block that fires is recorded, so two firing blocks produce
+# CONFLICTING rather than a silent priority win (14 visits in OASIS-3).
+d1_cognitive_status:
+  truth_value: "1"
+  false_value: "0"
+
+  DEMENTIA:
+    rule_id: d1_demented
+    any_of: [DEMENTED]
+    reference: "D1 DEMENTED==1; 92.6% agreement with B4 dementia text (n=1371)."
+
+  MCI:
+    rule_id: d1_mci_any
+    any_of: [MCIAMEM, MCIAPLUS, MCINON1, MCINON2]
+    reference: >-
+      NACC UDS amnestic (MCIAMEM, MCIAPLUS) and non-amnestic (MCINON1,
+      MCINON2) MCI flags. 77-87% fall in the B4 "uncertain" family, which
+      carries no MCI text of its own.
+    # Domain qualifiers that accompany each core indicator. They describe the
+    # subtype; they never decide whether the visit is MCI. Recorded in
+    # `mci_subtype` and `mci_domains` so the subtype survives into the outputs.
+    subtypes:
+      MCIAMEM:  {label: amnestic_single_domain, domains: []}
+      MCIAPLUS: {label: amnestic_multi_domain,
+                 domains: {MCIAPLAN: language, MCIAPATT: attention,
+                           MCIAPEX: executive, MCIAPVIS: visuospatial}}
+      MCINON1:  {label: non_amnestic_single_domain,
+                 domains: {MCIN1LAN: language, MCIN1ATT: attention,
+                           MCIN1EX: executive, MCIN1VIS: visuospatial}}
+      MCINON2:  {label: non_amnestic_multi_domain,
+                 domains: {MCIN2LAN: language, MCIN2ATT: attention,
+                           MCIN2EX: executive, MCIN2VIS: visuospatial}}
+
+  IMPAIRED_NOT_MCI:
+    rule_id: d1_impaired_no_mci
+    any_of: [IMPNOMCI]
+    reference: >-
+      D1 IMPNOMCI==1, cognitively impaired but not meeting MCI criteria.
+      91.4% fall in the B4 "uncertain" family (n=255).
+
+  CN:
+    rule_id: d1_normcog
+    any_of: [NORMCOG]
+    reference: "D1 NORMCOG==1; 99.7% agreement with B4 'Cognitively normal' (n=5785)."
+
+# ---------------------------------------------------------------------------
+# D1 aetiology
+# ---------------------------------------------------------------------------
+# Applies to DEMENTIA and to MCI alike: D1 records aetiology for both, so
+# "MCI due to AD" is expressible. The two form eras are disjoint in OASIS-3
+# (PROBAD/POSSAD filled on 800 demented visits, alzdis on 562, never both).
+d1_ad_etiology:
+  truth_value: "1"
+
+  AD:
+    rule_id: d1_ad_etiology
+    any_of: [PROBAD, POSSAD, alzdis]
+    reference: >-
+      UDS v1/v2 PROBAD/POSSAD (probable/possible AD) and UDS v3 alzdis
+      (Alzheimer's disease). The two generations are disjoint in OASIS-3 and
+      are version-dependent representations of the same concept; neither is
+      required to exist. 98.1% / 95.8% agreement with B4 AD text.
+    # The paired "IF" fields qualify the flag rather than repeating it. Their
+    # domain is {0, 1, 2}, NOT binary: 1 = primary aetiology, 2 = contributing.
+    # Observed in OASIS-3: PROBADIF 2 x9, POSSADIF 2 x39, alzdisif 2 x6.
+    role_qualifiers:
+      PROBAD: PROBADIF
+      POSSAD: POSSADIF
+      alzdis: alzdisif
+
+  NON_AD:
+    rule_id: d1_non_ad_etiology
+    any_of: [DLB, VASC, VASCPS, FTD, PPAPH, ALCDEM, DEMUN, PARK, HUNT, PRION, BRNINJ, HYCEPH, NEOP]
+    reference: >-
+      Non-Alzheimer aetiologies: Lewy body, vascular, frontotemporal,
+      primary progressive aphasia, alcohol-related, Parkinson, and other
+      documented causes. FTD==1 is 100% non-AD dementia in B4 (n=9).
+
+# When both an AD and a non-AD aetiology are flagged the aetiology is MIXED.
+# A mixed aetiology keeps the AD label but is recorded and excluded from the
+# default training cohort - see conflict_policy.
+mixed_etiology_label: MIXED
+
+# Which aetiology roles admit a demented visit into the AD class.
+# "primary"      the IF field says 1
+# "unspecified"  the flag is set but its IF field is blank
+# "contributing" the IF field says 2 - AD is present but is NOT the primary
+#                cause, so by default it does NOT make the visit AD, mirroring
+#                the exclusion of the B4 string "AD dem cannot be primary".
+ad_etiology_roles_accepted: [primary, unspecified]
+
+# ---------------------------------------------------------------------------
+# Final label composition
+# ---------------------------------------------------------------------------
+# cognitive_status x ad_etiology -> supervised_label
+label_composition:
+  CN: CN
+  MCI: MCI
+  IMPAIRED_NOT_MCI: IMPAIRED_NOT_MCI
+  DEMENTIA+AD: AD
+  DEMENTIA+NON_AD: OTHER_DEMENTIA
+  DEMENTIA+MIXED: OTHER_DEMENTIA
+  DEMENTIA+UNKNOWN: DEMENTIA_UNKNOWN_ETIOLOGY
+
+# Labels admitted to the default supervised training cohort.
+training_labels: [CN, MCI, AD]
+
+# ---------------------------------------------------------------------------
+# Auxiliary B4 validation
+# ---------------------------------------------------------------------------
+# The v1.0 text mapping, now used ONLY to cross-check the D1 label and to
+# populate `b4_agreement`. It never assigns or overrides a label.
+b4_validation:
+  enabled: true
+  # B4 label -> D1 labels considered concordant with it.
+  concordance:
+    CN: [CN]
+    AD: [AD, DEMENTIA_UNKNOWN_ETIOLOGY]
+    OTHER_DEMENTIA: [OTHER_DEMENTIA, DEMENTIA_UNKNOWN_ETIOLOGY]
+    UNCERTAIN: [MCI, IMPAIRED_NOT_MCI]
+    NON_DIAGNOSTIC: []
+
+current_state:
+
+  CN:
+    rule_id: cn_b4_dx1_exact
+    dx1_exact:
+      - Cognitively normal
+      - No dementia
+
+  MCI:
+    rule_id: mci_b4_dx1_exact
+    reference: "B4 carries no MCI text; MCI now comes from D1."
+    dx1_exact: []
+
+  AD:
+    rule_id: ad_b4_dx1_exact
+    dx1_exact:
+      - AD Dementia
+      - DAT
+      - AD dem w/depresss, not contribut
+      - AD dem w/depresss, contribut
+      - AD dem Language dysf with
+      - AD dem Language dysf after
+      - AD dem Language dysf prior
+      - AD dem w/CVD not contrib
+      - AD dem w/CVD contribut
+      - AD dem w/PDI after AD dem not contrib
+      - AD dem w/PDI after AD dem contribut
+      - AD dem w/oth (list B) contribut
+      - AD dem w/oth (list B) not contrib
+      - AD dem distrubed social, with
+      - AD dem distrubed social, after
+      - AD dem distrubed social, prior
+      - AD dem visuospatial, with
+      - AD dem visuospatial, prior
+      - AD dem visuospatial, after
+      - AD dem w/oth unusual features/demt on
+      - AD dem w/oth unusual feat/subs demt
+      - AD dem w/oth unusual features
+      - AD dem/FLD prior to AD dem
+      - AD dem w/Frontal lobe/demt at onset
+      - DAT w/depresss, not contribut
+      - DAT w/depresss, contribut
+      - DAT Language dysf after
+      - DAT w/CVD contribut
+      - DAT w/CVD not contrib
+      - DAT w/PDI after DAT not contrib
+      - DAT distrubed social, prior
+      - DAT distrubed social, after
+
+excluded:
+
+  OTHER_DEMENTIA:
+    rule_id: other_dementia_b4_dx1_exact
+    dx1_exact:
+      - DLBD, primary
+      - DLBD, secondary
+      - Vascular Demt, primary
+      - Vascular Demt, secondary
+      - Frontotemporal demt. prim
+      - Frontotemporal demt. secn
+      - Dementia/PD, primary
+      - Non AD dem, Other primary
+      - Non DAT, Other primary
+      - Incipient Non-AD dem
+      - ProAph w/o dement
+      - AD dem cannot be primary
+
+  UNCERTAIN:
+    rule_id: uncertain_b4_dx1_exact
+    reference: >-
+      The WashU/ADRC "uncertain" family. v2.0 no longer needs to decide what
+      these mean: D1 states MCI or impaired-not-MCI explicitly.
+    dx1_exact:
+      - uncertain dementia
+      - 'Unc: ques. Impairment'
+      - 0.5 in memory only
+      - Incipient demt PTP
+      - uncertain, possible NON AD dem
+      - 'Unc: impair reversible'
+
+  NON_DIAGNOSTIC:
+    rule_id: non_diagnostic_token
+    dx1_exact:
+      - "Q"
+
+secondary:
+
+  AD:
+    rule_id: ad_b4_secondary_exact
+    values:
+      - AD Dementia
+      - DAT
+      - AD dem w/depresss, not contribut
+      - AD dem w/depresss, contribut
+      - AD dem Language dysf with
+      - AD dem Language dysf after
+      - AD dem Language dysf prior
+      - AD dem w/CVD not contrib
+      - AD dem w/CVD contribut
+      - AD dem w/PDI after AD dem not contrib
+      - AD dem w/PDI after AD dem contribut
+      - AD dem w/oth (list B) contribut
+      - AD dem w/oth (list B) not contrib
+      - AD dem distrubed social, with
+      - AD dem distrubed social, after
+      - AD dem distrubed social, prior
+      - AD dem visuospatial, with
+      - AD dem visuospatial, prior
+      - AD dem visuospatial, after
+      - AD dem w/oth unusual features/demt on
+      - AD dem w/oth unusual feat/subs demt
+      - AD dem w/oth unusual features
+      - AD dem/FLD prior to AD dem
+      - AD dem w/Frontal lobe/demt at onset
+      - DAT w/depresss, not contribut
+      - DAT w/depresss, contribut
+      - DAT Language dysf after
+      - DAT w/CVD contribut
+      - DAT w/CVD not contrib
+      - DAT w/PDI after DAT not contrib
+      - DAT distrubed social, prior
+      - DAT distrubed social, after
+      - DAT visuospatial, after
+      - DAT w/PDI after DAT contribut
+      - DAT w/oth (list B) contribut
+
+  OTHER_DEMENTIA:
+    rule_id: other_dementia_b4_secondary_exact
+    values:
+      - DLBD, primary
+      - DLBD, secondary
+      - Vascular Demt, primary
+      - Vascular Demt, secondary
+      - Frontotemporal demt. prim
+      - Frontotemporal demt. secn
+      - Dementia/PD, primary
+      - Non AD dem, Other primary
+      - Non DAT, Other primary
+      - Incipient Non-AD dem
+      - ProAph w/o dement
+      - AD dem cannot be primary
+      - Active DLBD
+      - Active PSNP
+      - DAT cannot be primary
+      - Non AD dem, Other secondary
+      - Non DAT, Other secondary
+
+  UNCERTAIN:
+    rule_id: uncertain_b4_secondary_exact
+    values:
+      - uncertain dementia
+      - 'Unc: ques. Impairment'
+      - 0.5 in memory only
+      - Incipient demt PTP
+      - uncertain, possible NON AD dem
+      - 'Unc: impair reversible'
+
+  COMORBIDITY:
+    rule_id: comorbidity_b4_secondary_exact
+    reference: >-
+      NOTE: "other mental retarAD demion" is a corrupted string in the source
+      file - a find/replace turned "dat" into "AD dem" inside "retardation".
+    values:
+      - Active Affective disorder
+      - Active Alcoholism
+      - Active B-12 Deficiency
+      - Active Bereavement
+      - Active CVD
+      - Active Global Cerebral Hypop
+      - Active Hydrocephalus
+      - Active Hypothyroidism
+      - Active Major Head Trauma
+      - Active Med-induced Cog Dys
+      - Active Mood disorder
+      - Active Other neurol/med diagnoses
+      - Active PD drug-induced
+      - Active PD idiopathic
+      - Active Seizure Disorder
+      - Oth potentially transmissible dis
+      - Park Idiopathic
+      - Rapid Course (not CJD)
+      - Remote Alcoholism
+      - Remote Amnestic syndrome
+      - Remote B-12 Deficiency
+      - Remote Bereavement
+      - Remote CVD
+      - Remote Global Cerebral Hypop
+      - Remote Hydrocephalus
+      - Remote Hypothyroidism
+      - Remote Major Head Trauma
+      - Remote Med-induced Cog Dys
+      - Remote Mood disorder
+      - Remote Other neurol/med diagnoses
+      - Remote PD drug-induced
+      - Remote PD idiopathic
+      - Remote Seizure Disorder
+      - other mental retarAD demion
+      - other neurol/med diagnoses
+
+  NON_DIAGNOSTIC:
+    rule_id: non_diagnostic_token
+    values:
+      - "A"
+      - "B"
+
+conflict_policy:
+  # Two D1 cognitive-status blocks firing at once -> CONFLICTING, not a
+  # priority win. 14 OASIS-3 visits are affected.
+  multiple_cognitive_states_conflict: true
+  # A mixed AD / non-AD aetiology is recorded and kept out of the cohort.
+  mixed_etiology_excluded: true
+  secondary_ad_promotes_primary: false
+  flag_cn_with_dementia_secondary: true
+  flag_mixed_dementia_etiology: true
+
+consistency_checks:
+  enabled: true
+  cn_max_cdrtot: 0.0
+  ad_min_cdrtot: 0.5
