@@ -1,0 +1,151 @@
+{
+  "timestamp_utc": "2026-08-30T06:26:35+00:00",
+  "environment": {
+    "python": "3.10.11",
+    "python_implementation": "CPython",
+    "platform": "macOS-14.6.1-arm64-arm-64bit",
+    "oasis_radiomics": "0.2.0",
+    "numpy": "1.26.4",
+    "pandas": "2.2.3",
+    "nibabel": "5.3.2",
+    "scipy": "1.14.1",
+    "SimpleITK": "2.4.0",
+    "pyradiomics": "v3.0.1"
+  },
+  "input_dir": "/Users/luanr/vscode/radiomics/oasis3_data/freesurfer",
+  "output_dir": "/Users/luanr/vscode/radiomics/results_full",
+  "config": {
+    "radiomics": {
+      "binWidth": 25,
+      "normalize": true,
+      "normalizeScale": 100,
+      "correctMask": true,
+      "label": 1,
+      "enableCExtensions": false
+    },
+    "image_types": {
+      "Original": {}
+    },
+    "feature_classes": [
+      "firstorder",
+      "shape",
+      "glcm",
+      "glrlm",
+      "glszm",
+      "gldm",
+      "ngtdm"
+    ],
+    "roi_labels": {
+      "left_hippocampus": [
+        17
+      ],
+      "right_hippocampus": [
+        53
+      ],
+      "left_amygdala": [
+        18
+      ],
+      "right_amygdala": [
+        54
+      ],
+      "left_entorhinal": [
+        1006
+      ],
+      "right_entorhinal": [
+        2006
+      ],
+      "left_fusiform": [
+        1007
+      ],
+      "right_fusiform": [
+        2007
+      ],
+      "left_inferior_temporal": [
+        1009
+      ],
+      "right_inferior_temporal": [
+        2009
+      ],
+      "left_middle_temporal": [
+        1015
+      ],
+      "right_middle_temporal": [
+        2015
+      ],
+      "left_parahippocampal": [
+        1016
+      ],
+      "right_parahippocampal": [
+        2016
+      ],
+      "left_precuneus": [
+        1025
+      ],
+      "right_precuneus": [
+        2025
+      ]
+    },
+    "bilateral": {
+      "extract_union_mask": false,
+      "left_roi": "left_hippocampus",
+      "right_roi": "right_hippocampus",
+      "additive_features": [
+        "mask_voxels",
+        "mask_volume_mm3",
+        "original_shape_MeshVolume",
+        "original_shape_VoxelVolume",
+        "original_shape_SurfaceArea"
+      ],
+      "asymmetry_mode": "positive_only"
+    },
+    "quality_control": {
+      "min_hippocampus_volume_mm3": 1000.0,
+      "max_hippocampus_volume_mm3": 7000.0,
+      "min_hippocampus_voxels": 500,
+      "max_absolute_volume_asymmetry": 0.2,
+      "outliers": {
+        "method": "mad",
+        "threshold": 3.5,
+        "iqr_multiplier": 1.5,
+        "min_samples": 8,
+        "columns": [
+          "left_volume_mm3",
+          "right_volume_mm3",
+          "total_volume_mm3",
+          "volume_asymmetry"
+        ]
+      }
+    },
+    "longitudinal": {
+      "delta_comparisons": [
+        "consecutive",
+        "baseline"
+      ],
+      "min_sessions_for_slope": 2,
+      "days_per_year": 365.25
+    },
+    "source_path": "/Users/luanr/vscode/radiomics/radiomics_config.yaml"
+  },
+  "counts": {
+    "subjects": 51,
+    "sessions": 114,
+    "roi_rows": 1824,
+    "wide_rows": 114,
+    "delta_rows": 126,
+    "slope_rows": 74784,
+    "features_per_roi": 107,
+    "wide_columns": 1971,
+    "failed_sessions": []
+  },
+  "outputs": {
+    "features_long": "results_full/radiomics_features_long.csv",
+    "features_wide": "results_full/radiomics_features_wide.csv",
+    "deltas": "results_full/radiomics_longitudinal_deltas.csv",
+    "slopes": "results_full/radiomics_longitudinal_slopes.csv",
+    "quality_control": "results_full/quality_control.csv"
+  },
+  "notes": [
+    "Left and right hippocampi are extracted separately; bilateral quantities are derived tabularly, never from a disconnected union mask.",
+    "NumPy 2.x must not be used with PyRadiomics 3.0.1 in this environment (observed segmentation fault); see requirements.txt."
+  ]
+}
