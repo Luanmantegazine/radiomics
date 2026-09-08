@@ -1,0 +1,133 @@
+source_column,raw_diagnosis,normalized_diagnosis,count_sessions,count_subjects,mapped_label,rule_id,mapping_status,is_primary_column
+dx1,Cognitively normal,cognitively normal,1458,763,CN,cn_b4_dx1_exact,mapped,True
+dx1,AD Dementia,ad dementia,202,181,AD,ad_b4_dx1_exact,mapped,True
+dx1,uncertain dementia,uncertain dementia,103,94,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,"DLBD, primary","dlbd, primary",13,13,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,"AD dem w/depresss, not contribut","ad dem w/depresss, not contribut",11,11,AD,ad_b4_dx1_exact,mapped,True
+dx1,No dementia,no dementia,10,8,CN,cn_b4_dx1_exact,mapped,True
+dx1,"AD dem w/depresss, contribut","ad dem w/depresss, contribut",7,7,AD,ad_b4_dx1_exact,mapped,True
+dx1,DAT,dat,6,6,AD,ad_b4_dx1_exact,mapped,True
+dx1,0.5 in memory only,0.5 in memory only,6,6,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,Unc: ques. Impairment,unc: ques. impairment,5,5,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,Frontotemporal demt. prim,frontotemporal demt. prim,5,5,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,"Vascular Demt, primary","vascular demt, primary",4,4,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,AD dem w/CVD not contrib,ad dem w/cvd not contrib,4,4,AD,ad_b4_dx1_exact,mapped,True
+dx1,"uncertain, possible NON AD dem","uncertain, possible non ad dem",4,4,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,AD dem Language dysf with,ad dem language dysf with,4,4,AD,ad_b4_dx1_exact,mapped,True
+dx1,AD dem w/oth (list B) not contrib,ad dem w/oth (list b) not contrib,3,3,AD,ad_b4_dx1_exact,mapped,True
+dx1,"Non AD dem, Other primary","non ad dem, other primary",3,2,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,AD dem Language dysf after,ad dem language dysf after,3,3,AD,ad_b4_dx1_exact,mapped,True
+dx1,AD dem w/oth (list B) contribut,ad dem w/oth (list b) contribut,2,2,AD,ad_b4_dx1_exact,mapped,True
+dx1,AD dem w/PDI after AD dem not contrib,ad dem w/pdi after ad dem not contrib,2,2,AD,ad_b4_dx1_exact,mapped,True
+dx1,DAT Language dysf after,dat language dysf after,2,2,AD,ad_b4_dx1_exact,mapped,True
+dx1,"Non DAT, Other primary","non dat, other primary",2,2,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,AD dem Language dysf prior,ad dem language dysf prior,2,2,AD,ad_b4_dx1_exact,mapped,True
+dx1,"AD dem distrubed social, with","ad dem distrubed social, with",2,2,AD,ad_b4_dx1_exact,mapped,True
+dx1,"Dementia/PD, primary","dementia/pd, primary",2,2,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,"AD dem visuospatial, with","ad dem visuospatial, with",1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,Incipient Non-AD dem,incipient non-ad dem,1,1,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,"AD dem distrubed social, after","ad dem distrubed social, after",1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,AD dem w/CVD contribut,ad dem w/cvd contribut,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,DAT w/PDI after DAT not contrib,dat w/pdi after dat not contrib,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,AD dem w/PDI after AD dem contribut,ad dem w/pdi after ad dem contribut,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,"DAT distrubed social, after","dat distrubed social, after",1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,"Vascular Demt, secondary","vascular demt, secondary",1,1,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,AD dem cannot be primary,ad dem cannot be primary,1,1,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,DAT w/CVD contribut,dat w/cvd contribut,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx2,A,a,512,407,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx2,Active Mood disorder,active mood disorder,185,152,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Mood disorder,remote mood disorder,136,112,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Other neurol/med diagnoses,active other neurol/med diagnoses,38,35,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote CVD,remote cvd,30,27,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Hypothyroidism,remote hypothyroidism,29,24,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"AD dem w/depresss, not contribut","ad dem w/depresss, not contribut",13,13,AD,ad_b4_secondary_exact,mapped,False
+dx2,Active Bereavement,active bereavement,10,10,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Bereavement,remote bereavement,10,10,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote B-12 Deficiency,remote b-12 deficiency,9,8,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active PD idiopathic,active pd idiopathic,9,8,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Alcoholism,active alcoholism,8,6,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Med-induced Cog Dys,remote med-induced cog dys,8,7,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Major Head Trauma,remote major head trauma,8,8,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,8,8,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Hypothyroidism,active hypothyroidism,6,6,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Seizure Disorder,active seizure disorder,5,4,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,DAT cannot be primary,dat cannot be primary,5,5,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,AD dem w/oth (list B) contribut,ad dem w/oth (list b) contribut,4,4,AD,ad_b4_secondary_exact,mapped,False
+dx2,B,b,3,3,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx2,Active B-12 Deficiency,active b-12 deficiency,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,AD dem Language dysf with,ad dem language dysf with,3,3,AD,ad_b4_secondary_exact,mapped,False
+dx2,Active CVD,active cvd,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Seizure Disorder,remote seizure disorder,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Med-induced Cog Dys,active med-induced cog dys,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"Non AD dem, Other primary","non ad dem, other primary",3,3,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,Remote Alcoholism,remote alcoholism,3,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"AD dem w/depresss, contribut","ad dem w/depresss, contribut",3,3,AD,ad_b4_secondary_exact,mapped,False
+dx2,Active Major Head Trauma,active major head trauma,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"DLBD, secondary","dlbd, secondary",2,2,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,AD dem w/CVD contribut,ad dem w/cvd contribut,2,2,AD,ad_b4_secondary_exact,mapped,False
+dx2,AD dem w/PDI after AD dem not contrib,ad dem w/pdi after ad dem not contrib,2,2,AD,ad_b4_secondary_exact,mapped,False
+dx2,AD dem w/CVD not contrib,ad dem w/cvd not contrib,2,2,AD,ad_b4_secondary_exact,mapped,False
+dx2,AD dem w/oth (list B) not contrib,ad dem w/oth (list b) not contrib,2,2,AD,ad_b4_secondary_exact,mapped,False
+dx2,"AD dem distrubed social, after","ad dem distrubed social, after",2,2,AD,ad_b4_secondary_exact,mapped,False
+dx2,Remote Global Cerebral Hypop,remote global cerebral hypop,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Rapid Course (not CJD),rapid course (not cjd),1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Global Cerebral Hypop,active global cerebral hypop,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,other mental retarAD demion,other mental retarad demion,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Frontotemporal demt. secn,frontotemporal demt. secn,1,1,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,"DAT visuospatial, after","dat visuospatial, after",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,"AD dem visuospatial, with","ad dem visuospatial, with",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,"AD dem distrubed social, with","ad dem distrubed social, with",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,"AD dem visuospatial, prior","ad dem visuospatial, prior",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,AD dem cannot be primary,ad dem cannot be primary,1,1,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx3,A,a,702,559,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx3,Active Other neurol/med diagnoses,active other neurol/med diagnoses,26,25,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Mood disorder,active mood disorder,22,22,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Hypothyroidism,remote hypothyroidism,20,17,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Med-induced Cog Dys,active med-induced cog dys,12,10,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Mood disorder,remote mood disorder,11,11,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,6,6,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Bereavement,active bereavement,6,6,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Bereavement,remote bereavement,5,5,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote B-12 Deficiency,remote b-12 deficiency,5,5,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Alcoholism,remote alcoholism,4,4,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active PD idiopathic,active pd idiopathic,4,4,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Alcoholism,active alcoholism,4,4,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Seizure Disorder,remote seizure disorder,3,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote CVD,remote cvd,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Major Head Trauma,remote major head trauma,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,AD dem w/oth (list B) contribut,ad dem w/oth (list b) contribut,2,2,AD,ad_b4_secondary_exact,mapped,False
+dx3,Active CVD,active cvd,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,AD dem w/oth (list B) not contrib,ad dem w/oth (list b) not contrib,1,1,AD,ad_b4_secondary_exact,mapped,False
+dx3,"AD dem distrubed social, with","ad dem distrubed social, with",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx3,Oth potentially transmissible dis,oth potentially transmissible dis,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,AD dem w/PDI after AD dem not contrib,ad dem w/pdi after ad dem not contrib,1,1,AD,ad_b4_secondary_exact,mapped,False
+dx3,Active Major Head Trauma,active major head trauma,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,DAT cannot be primary,dat cannot be primary,1,1,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx3,DAT w/oth (list B) contribut,dat w/oth (list b) contribut,1,1,AD,ad_b4_secondary_exact,mapped,False
+dx3,Remote Hydrocephalus,remote hydrocephalus,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Hypothyroidism,active hypothyroidism,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,"AD dem w/depresss, contribut","ad dem w/depresss, contribut",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx3,"AD dem w/depresss, not contribut","ad dem w/depresss, not contribut",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx4,A,a,766,608,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx4,Active Other neurol/med diagnoses,active other neurol/med diagnoses,10,9,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Mood disorder,active mood disorder,5,5,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Major Head Trauma,remote major head trauma,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Mood disorder,remote mood disorder,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Hypothyroidism,active hypothyroidism,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Hypothyroidism,remote hypothyroidism,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Seizure Disorder,remote seizure disorder,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active CVD,active cvd,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Med-induced Cog Dys,active med-induced cog dys,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active B-12 Deficiency,active b-12 deficiency,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Alcoholism,active alcoholism,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote B-12 Deficiency,remote b-12 deficiency,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Major Head Trauma,active major head trauma,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,A,a,775,614,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx5,Active Other neurol/med diagnoses,active other neurol/med diagnoses,3,3,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Remote Med-induced Cog Dys,remote med-induced cog dys,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Remote B-12 Deficiency,remote b-12 deficiency,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Active Seizure Disorder,active seizure disorder,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Active Med-induced Cog Dys,active med-induced cog dys,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,Remote Major Head Trauma,remote major head trauma,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False

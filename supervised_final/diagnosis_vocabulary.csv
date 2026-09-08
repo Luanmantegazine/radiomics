@@ -1,0 +1,37 @@
+source_column,raw_diagnosis,normalized_diagnosis,count_sessions,count_subjects,mapped_label,rule_id,mapping_status,is_primary_column
+dx1,AD Dementia,ad dementia,35,25,AD,ad_b4_dx1_exact,mapped,True
+dx1,uncertain dementia,uncertain dementia,14,13,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,Cognitively normal,cognitively normal,9,4,CN,cn_b4_dx1_exact,mapped,True
+dx1,0.5 in memory only,0.5 in memory only,2,2,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,AD dem w/CVD contribut,ad dem w/cvd contribut,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,"uncertain, possible NON AD dem","uncertain, possible non ad dem",1,1,UNCERTAIN,uncertain_b4_dx1_exact,mapped,True
+dx1,AD dem w/PDI after AD dem not contrib,ad dem w/pdi after ad dem not contrib,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx1,"DLBD, primary","dlbd, primary",1,1,OTHER_DEMENTIA,other_dementia_b4_dx1_exact,mapped,True
+dx1,AD dem Language dysf prior,ad dem language dysf prior,1,1,AD,ad_b4_dx1_exact,mapped,True
+dx2,Remote Mood disorder,remote mood disorder,8,6,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,A,a,8,8,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx2,Active Other neurol/med diagnoses,active other neurol/med diagnoses,4,4,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Active Mood disorder,active mood disorder,2,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Global Cerebral Hypop,remote global cerebral hypop,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote Med-induced Cog Dys,remote med-induced cog dys,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote CVD,remote cvd,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"DLBD, secondary","dlbd, secondary",1,1,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,Active Alcoholism,active alcoholism,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,Remote B-12 Deficiency,remote b-12 deficiency,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"Non AD dem, Other primary","non ad dem, other primary",1,1,OTHER_DEMENTIA,other_dementia_b4_secondary_exact,mapped,False
+dx2,"AD dem w/depresss, not contribut","ad dem w/depresss, not contribut",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,Active Seizure Disorder,active seizure disorder,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx2,"AD dem distrubed social, with","ad dem distrubed social, with",1,1,AD,ad_b4_secondary_exact,mapped,False
+dx2,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,A,a,13,13,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx3,Active Med-induced Cog Dys,active med-induced cog dys,3,2,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Mood disorder,remote mood disorder,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Active Mood disorder,active mood disorder,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx3,Remote Hypothyroidism,remote hypothyroidism,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,A,a,15,15,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx4,Remote Other neurol/med diagnoses,remote other neurol/med diagnoses,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Med-induced Cog Dys,active med-induced cog dys,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Remote Hypothyroidism,remote hypothyroidism,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx4,Active Other neurol/med diagnoses,active other neurol/med diagnoses,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False
+dx5,A,a,17,17,NON_DIAGNOSTIC,non_diagnostic_token,mapped,False
+dx5,Active Seizure Disorder,active seizure disorder,1,1,COMORBIDITY,comorbidity_b4_secondary_exact,mapped,False

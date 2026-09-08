@@ -1,0 +1,91 @@
+{
+  "parameters": {
+    "label_policy_version": "oasis3-supervised-labels-v2.1",
+    "label_policy_path": "/Users/luanr/vscode/radiomics/supervised_labels.yaml",
+    "policy_defines_mci": true,
+    "clinical_window_days": 180,
+    "progression_horizon_days": 1095,
+    "oasis_radiomics_version": "0.2.0",
+    "clinical_radiomics": "/Users/luanr/vscode/radiomics/dataset_final/clinical_radiomics_sessions.csv",
+    "clinical_visits": "/Users/luanr/vscode/radiomics/clinical_results/clinical_visits.csv",
+    "n_predictor_columns": 2233
+  },
+  "sessions_total": 65,
+  "subjects_total": 41,
+  "valid_clinical_match": 64,
+  "CN_sessions": 9,
+  "MCI_sessions": 15,
+  "AD_sessions": 37,
+  "other_dementia_sessions": 2,
+  "impaired_not_mci_sessions": 2,
+  "dementia_unknown_etiology_sessions": 0,
+  "uncertain_sessions": 0,
+  "unmapped_sessions": 0,
+  "non_diagnostic_sessions": 0,
+  "missing_diagnosis_sessions": 0,
+  "conflicting_sessions": 0,
+  "b4_agreement": {
+    "agree": 60,
+    "disagree": 5
+  },
+  "ad_etiology": {
+    "AD": 46,
+    "MIXED": 2,
+    "NON_AD": 2,
+    "UNKNOWN": 15
+  },
+  "ad_etiology_role": {
+    "None": 16,
+    "contributing": 1,
+    "primary": 46,
+    "unspecified": 2
+  },
+  "mci_subtype": {
+    "amnestic_multi_domain": 6,
+    "amnestic_single_domain": 8,
+    "non_amnestic_single_domain": 1
+  },
+  "b4_disagreements": {
+    "D1=OTHER_DEMENTIA vs B4=AD": 2,
+    "D1=MCI vs B4=AD": 1,
+    "D1=AD vs B4=OTHER_DEMENTIA": 1,
+    "D1=AD vs B4=UNCERTAIN": 1
+  },
+  "CN_subjects": 4,
+  "MCI_subjects": 14,
+  "AD_subjects": 27,
+  "other_dementia_subjects": 1,
+  "impaired_not_mci_subjects": 2,
+  "dementia_unknown_etiology_subjects": 0,
+  "uncertain_subjects": 0,
+  "unmapped_subjects": 0,
+  "training_eligible_sessions": 60,
+  "training_eligible_subjects": 39,
+  "exclusion_reasons": {
+    "impaired_not_mci": 2,
+    "other_dementia": 2,
+    "outside_clinical_window": 1
+  },
+  "label_warnings": {
+    "d1_b4_disagreement(D1=AD is not concordant with B4=OTHER_DEMENTIA)": 1,
+    "d1_b4_disagreement(D1=AD is not concordant with B4=UNCERTAIN)": 1,
+    "d1_b4_disagreement(D1=MCI is not concordant with B4=AD)": 1,
+    "d1_b4_disagreement(D1=OTHER_DEMENTIA is not concordant with B4=AD)": 2
+  },
+  "mci_progression_candidates": 15,
+  "mci_to_ad": 1,
+  "mci_stable": 10,
+  "censored": 4,
+  "mci_to_ad_subjects": 1,
+  "mci_stable_subjects": 9,
+  "censored_subjects": 4,
+  "diagnosis_strings_total": 36,
+  "diagnosis_strings_unmapped": 0,
+  "unmapped_diagnosis_strings": [],
+  "dataset_is_final": true,
+  "notes": [
+    "Split by subject_id, never by session row: one participant contributes several MRI sessions and row-wise splitting leaks.",
+    "CENSORED is not MCI_STABLE. A participant lost to follow-up before the horizon has an unobservable outcome and is ineligible.",
+    "Radiomic deltas (t0->t1) may only predict outcomes after t1, and full-history subject slopes must not be used for conversion prediction: they may include sessions recorded after the conversion."
+  ]
+}
