@@ -10,6 +10,7 @@ Subcommands
 ``clinical-link`` MRI catalogue + D1/B4/C1 -> clinical imaging master + validation
 ``clinical-radiomics`` clinical master + radiomics tables -> analysis datasets
 ``supervised-labels`` clinical-radiomics sessions -> CN/MCI/AD + MCI->AD datasets
+``analysis``      delegate to the isolated downstream analysis CLI
 
 Examples
 --------
@@ -38,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
 import sys
 from pathlib import Path
 
@@ -86,6 +88,8 @@ DEFAULT_FEATURES = DEFAULT_OUTPUT / "radiomics_features_long.csv"
 DEFAULT_CLINICAL_OUTPUT = Path("clinical_results")
 DEFAULT_DATASET_OUTPUT = Path("dataset")
 DEFAULT_SUPERVISED_OUTPUT = Path("supervised_dataset")
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+ANALYSIS_ROOT = REPOSITORY_ROOT / "oasis_analysis"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -200,6 +204,22 @@ def build_parser() -> argparse.ArgumentParser:
     supervised.add_argument("--output", type=Path, default=DEFAULT_SUPERVISED_OUTPUT, help="Directory for the supervised datasets.")
     supervised.set_defaults(handler=_handle_supervised_labels)
 
+    analysis = subparsers.add_parser(
+        "analysis",
+        help="Run the isolated downstream OASIS-3 analysis CLI.",
+        description=(
+            "Forward commands to oasis_analysis/cli.py using that folder's "
+            "virtual environment when available."
+        ),
+    )
+    analysis.add_argument(
+        "analysis_args",
+        nargs=argparse.REMAINDER,
+        metavar="ARG",
+        help="analysis command and arguments (for example: list or run demographic_baseline)",
+    )
+    analysis.set_defaults(handler=_handle_analysis)
+
     return parser
 
 
@@ -219,6 +239,40 @@ def _resolve_common(args: argparse.Namespace, parser: argparse.ArgumentParser) -
 # ---------------------------------------------------------------------------
 # handlers
 # ---------------------------------------------------------------------------
+def _analysis_python(analysis_root: Path = ANALYSIS_ROOT) -> Path:
+    """Prefer the analysis environment without loading it into this process."""
+    candidates = (
+        analysis_root / ".venv" / "bin" / "python",
+        analysis_root / ".venv" / "Scripts" / "python.exe",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return Path(sys.executable)
+
+
+def _handle_analysis(args: argparse.Namespace) -> int:
+    """Forward an ``analysis`` invocation to the folder's independent CLI."""
+    analysis_cli = ANALYSIS_ROOT / "cli.py"
+    if not analysis_cli.is_file():
+        print(f"Error: analysis CLI not found: {analysis_cli}", file=sys.stderr)
+        return 1
+
+    forwarded = list(args.analysis_args)
+    if forwarded[:1] == ["--"]:
+        forwarded = forwarded[1:]
+    try:
+        completed = subprocess.run(
+            [str(_analysis_python()), str(analysis_cli), *forwarded],
+            cwd=ANALYSIS_ROOT,
+            check=False,
+        )
+    except OSError as exc:
+        print(f"Error: could not start analysis CLI: {exc}", file=sys.stderr)
+        return 1
+    return completed.returncode
+
+
 def _handle_extract(args: argparse.Namespace, config: PipelineConfig) -> int:
     """``extract``: run the per-session radiomics extraction."""
     result = run_extraction(
@@ -386,6 +440,10 @@ def main(argv: list[str] | None = None) -> int:
     """Parse arguments, configure logging and dispatch to the handler."""
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    if args.command == "analysis":
+        return int(args.handler(args))
+
     _resolve_common(args, parser)
 
     try:
