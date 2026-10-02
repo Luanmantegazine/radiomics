@@ -90,6 +90,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--n-splits", type=int, default=5)
     parser.add_argument("--random-state", type=int, default=42)
+    parser.add_argument(
+        "--decision-threshold",
+        type=float,
+        default=0.5,
+        help="Probability cutoff for classifying AD (default: 0.5).",
+    )
     return parser.parse_args()
 
 
@@ -172,8 +178,12 @@ def build_pipeline(random_state: int) -> Pipeline:
     )
 
 
-def calculate_metrics(y_true: np.ndarray, probability: np.ndarray) -> dict[str, float | int]:
-    prediction = (probability >= 0.5).astype(int)
+def calculate_metrics(
+    y_true: np.ndarray,
+    probability: np.ndarray,
+    decision_threshold: float = 0.5,
+) -> dict[str, float | int]:
+    prediction = (probability >= decision_threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y_true, prediction, labels=[0, 1]).ravel()
     specificity = tn / (tn + fp) if tn + fp else float("nan")
     return {
@@ -186,7 +196,7 @@ def calculate_metrics(y_true: np.ndarray, probability: np.ndarray) -> dict[str, 
         "specificity": float(specificity),
         "f1": float(f1_score(y_true, prediction, zero_division=0)),
         "brier_score": float(brier_score_loss(y_true, probability)),
-        "threshold": 0.5,
+        "threshold": decision_threshold,
         "true_negative": int(tn),
         "false_positive": int(fp),
         "false_negative": int(fn),
@@ -223,7 +233,11 @@ def save_performance_curves(
     plt.close(fig)
 
 
-def save_confusion_matrix(metrics: dict[str, float | int], output_path: Path) -> None:
+def save_confusion_matrix(
+    metrics: dict[str, float | int],
+    output_path: Path,
+    decision_threshold: float = 0.5,
+) -> None:
     matrix = np.array(
         [
             [metrics["true_negative"], metrics["false_positive"]],
@@ -241,7 +255,7 @@ def save_confusion_matrix(metrics: dict[str, float | int], output_path: Path) ->
         yticks=[0, 1],
         xticklabels=["CN", "AD"],
         yticklabels=["CN", "AD"],
-        xlabel="Predicted class (threshold = 0.5)",
+        xlabel=f"Predicted class (threshold = {decision_threshold:g})",
         ylabel="True class",
         title="OOF confusion matrix",
     )
@@ -268,6 +282,7 @@ def build_split_table(
     fold: int,
     split: str,
     probabilities: np.ndarray | None = None,
+    decision_threshold: float = 0.5,
 ) -> pd.DataFrame:
     """Return an auditable copy of one fold's training or validation rows."""
     table = data.iloc[row_indices].copy()
@@ -278,7 +293,9 @@ def build_split_table(
     table["true_label_int"] = y[row_indices]
     if probabilities is not None:
         table["probability_ad"] = probabilities
-        table["predicted_label"] = np.where(probabilities >= 0.5, "AD", "CN")
+        table["predicted_label"] = np.where(
+            probabilities >= decision_threshold, "AD", "CN"
+        )
     return table
 
 
@@ -287,7 +304,10 @@ def run_baseline(
     output_dir: Path,
     n_splits: int,
     random_state: int,
+    decision_threshold: float = 0.5,
 ) -> dict[str, float | int]:
+    if not np.isfinite(decision_threshold) or not 0.0 <= decision_threshold <= 1.0:
+        raise ValueError("decision_threshold must be a finite number between 0 and 1 inclusive.")
     data = load_and_validate_cohort(input_path, n_splits)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -364,6 +384,7 @@ def run_baseline(
                 fold=fold,
                 split="validation",
                 probabilities=fold_probability,
+                decision_threshold=decision_threshold,
             ),
         }
         for split_name, split_table in split_tables.items():
@@ -381,7 +402,9 @@ def run_baseline(
                 }
             )
 
-        fold_metrics = calculate_metrics(y[validation_index], fold_probability)
+        fold_metrics = calculate_metrics(
+            y[validation_index], fold_probability, decision_threshold
+        )
         fold_metrics["fold"] = fold
         fold_rows.append(fold_metrics)
         split_audit.append(
@@ -412,7 +435,7 @@ def run_baseline(
     if max(validation_cn_counts) - min(validation_cn_counts) > 1:
         raise RuntimeError("CN participants are not distributed evenly across folds.")
 
-    overall_metrics = calculate_metrics(y, probabilities)
+    overall_metrics = calculate_metrics(y, probabilities, decision_threshold)
     overall_metrics.update(
         {
             "participants": len(data),
@@ -427,7 +450,9 @@ def run_baseline(
     oof["fold"] = fold_ids
     oof["true_label_int"] = y
     oof["probability_ad"] = probabilities
-    oof["predicted_label"] = np.where(probabilities >= 0.5, "AD", "CN")
+    oof["predicted_label"] = np.where(
+        probabilities >= decision_threshold, "AD", "CN"
+    )
     oof.to_csv(output_dir / "oof_predictions.csv", index=False, float_format="%.10f")
 
     assignments = data.copy()
@@ -460,7 +485,11 @@ def run_baseline(
         stream.write("\n")
 
     save_performance_curves(y, probabilities, overall_metrics, output_dir / "performance_curves.png")
-    save_confusion_matrix(overall_metrics, output_dir / "confusion_matrix.png")
+    save_confusion_matrix(
+        overall_metrics,
+        output_dir / "confusion_matrix.png",
+        decision_threshold,
+    )
 
     config = {
         "input": str(input_path),
@@ -487,7 +516,7 @@ def run_baseline(
             "sex": "OneHotEncoder(categories=[['F', 'M']], drop='first')",
             "classifier": "LogisticRegression(class_weight='balanced', solver='liblinear', max_iter=1000)",
         },
-        "decision_threshold": 0.5,
+        "decision_threshold": decision_threshold,
         "saved_models": "fold_XX_pipeline.joblib; each model is fitted only on that fold's training CSV",
         "software": {
             "python": platform.python_version(),
@@ -517,6 +546,7 @@ def main() -> None:
             output_dir=args.output_dir,
             n_splits=args.n_splits,
             random_state=args.random_state,
+            decision_threshold=args.decision_threshold,
         )
     except (OSError, ValueError, RuntimeError, pd.errors.ParserError) as error:
         LOGGER.exception("Demographic baseline failed: %s", error)
