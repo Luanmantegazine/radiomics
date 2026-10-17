@@ -58,3 +58,10 @@ supervised_dataset/
 clinical_results/
 oasis3_mri_catalog.csv
 luanmantegazine_*.csv
+
+# --- backfill side outputs: per-participant, keep local -------------------
+# clinical_radiomics_CONSOLIDATED_v3.csv itself IS versioned.
+# Regenerate everything with scripts/backfill_clinical_labels.py
+sem_rotulo_triagem.csv
+candidatos_fora_da_janela.csv
+backfill_report.md
