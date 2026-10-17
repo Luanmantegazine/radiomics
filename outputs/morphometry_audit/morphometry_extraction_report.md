@@ -64,9 +64,9 @@
 - none found
 
 ## Remote availability
-- remote_available: 0
+- remote_available: 77
 - remote_not_available: 0
-- remote_not_checked: 77
+- remote_not_checked: 0
 - remote_auth_required: 0
 - remote_lookup_error: 0
 - remote_multiple_candidates: 0

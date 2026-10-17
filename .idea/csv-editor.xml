@@ -17,6 +17,20 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/download/oasis3_freesurfer_index.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
       </map>
     </option>
   </component>
