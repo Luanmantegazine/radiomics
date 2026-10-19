@@ -1,8 +1,29 @@
-# OASIS-3 Alzheimer Radiomics Acquisition
+# MRI Radiomics for Alzheimer's Classification (OASIS-3)
 
-Reproducible pipeline for acquiring **already processed FreeSurfer outputs from OASIS-3** and transforming structural T1 MRI into a longitudinal radiomics dataset.
+Radiomics and machine learning pipeline to classify cognitively normal controls (CN) and patients with dementia attributed to Alzheimer's disease (AD) using structural T1 MRI from OASIS-3. This study is a computational feasibility assessment: the labels serve only as a reference to evaluate the pipeline, and the work does not provide clinical or biological diagnosis.
 
-This repository currently stops at **data acquisition, ROI extraction, radiomic feature extraction, longitudinal tabulation and quality control**. No machine learning, feature selection, SMOTE, ComBat or predictive modelling is part of the acquisition stage.
+This repository covers data acquisition, clinical consolidation, ROI extraction, radiomic feature extraction, longitudinal tabulation, quality control and model-tier assembly.
+
+## Model tiers
+
+The models use the same validation framework. Only the input feature block changes, which allows measuring the incremental value of each tier.
+
+| Tier | Input | Role |
+|---|---|---|
+| 1. Demographic | age, sex | Control: verifies whether the algorithm exploits age or sex differences between groups |
+| 2. Morphometric | FreeSurfer volumes and thicknesses | Comparator against conventional atrophy measures |
+| 3. Radiomic | PyRadiomics features from the 8 ROIs | Main study model |
+| 4. Combined | morphometric + radiomic | Measures whether radiomics adds information beyond morphometry |
+
+The morphometric tier contains image data only, without age and sex. This keeps the comparison between tiers clean.
+
+## Data
+
+Dataset: OASIS-3 (NITRC-IR/XNAT), with FreeSurfer 5.3 derivatives (`aseg.stats`, `lh/rh.aparc.stats`, Desikan–Killiany atlas).
+
+Labels: `supervised_label`, `training_eligible`, and `label_rule_id` fields from the clinical consolidated data. The window between image acquisition and clinical evaluation is up to 180 days. MCI and unlabeled sessions are excluded.
+
+Regions of interest (8): hippocampus, amygdala, entorhinal cortex, and parahippocampal cortex, in both hemispheres.
 
 ## Frozen acquisition protocol
 
@@ -21,13 +42,13 @@ FreeSurfer outputs already supplied by OASIS-3
         ↓
 T1.mgz + aparc+aseg.mgz
         ↓
-16 Alzheimer-related ROIs
+8 Alzheimer-related ROIs
         ↓
 Original T1 + PyRadiomics 3.0.1
         ↓
 107 frozen radiomic features / ROI
         ↓
-16 × 107 = 1,712 raw radiomic features / session
+8 × 107 = 856 raw radiomic features / session
         ↓
 radiomics_features_long.csv
         ↓
@@ -36,7 +57,7 @@ QC + acquisition validation gate
 longitudinal wide / delta / slope tables
 ```
 
-The frozen constants and exact feature names are in [`oasis_radiomics/protocol.py`](oasis_radiomics/protocol.py).
+The frozen constants and exact feature names are documented in the protocol module.
 
 ## Why 107 features instead of the 104 written in the preliminary project?
 
@@ -70,28 +91,24 @@ The validated environment actually returns **24 non-deprecated GLCM features** w
 
 The acquisition protocol therefore records a methodological amendment rather than deleting three valid GLCM measurements only to preserve the old arithmetic. The exact 107 names are explicitly enabled and every ROI is checked against that schema. A library upgrade cannot silently change the dataset.
 
-With 16 ROIs, the raw per-session count is consequently:
+With 8 ROIs, the raw per-session count is consequently:
 
 ```text
-16 × 107 = 1,712 radiomic features
+8 × 107 = 856 radiomic features
 ```
 
 Derived left/right means, totals, asymmetry indices, deltas and slopes are **derived variables** and are not counted as additional raw PyRadiomics features.
 
 ## Alzheimer ROIs
 
-Eight bilateral anatomical regions are extracted from `aparc+aseg.mgz`:
+Four bilateral anatomical regions are extracted from `aparc+aseg.mgz`:
 
 | Region | Left label | Right label |
 |---|---:|---:|
 | Hippocampus | 17 | 53 |
 | Amygdala | 18 | 54 |
 | Entorhinal cortex | 1006 | 2006 |
-| Fusiform | 1007 | 2007 |
-| Inferior temporal | 1009 | 2009 |
-| Middle temporal | 1015 | 2015 |
-| Parahippocampal | 1016 | 2016 |
-| Precuneus | 1025 | 2025 |
+| Parahippocampal cortex | 1016 | 2016 |
 
 Left and right masks are always separate. A disconnected bilateral union mask is never sent to PyRadiomics.
 
@@ -297,7 +314,7 @@ The acquisition gate is stricter than the anatomical QC table: it guarantees the
 ```text
 oasis_radiomics/
 ├── acquisition.py          cohort manifest + final acquisition validator
-├── protocol.py             frozen 16-ROI / 107-feature contract
+├── protocol.py             frozen 8-ROI / 107-feature contract
 ├── config.py
 ├── discovery.py            requires T1.mgz + aparc+aseg.mgz
 ├── download_oasis.py
@@ -311,7 +328,7 @@ oasis_radiomics/
 └── pipeline.py
 
 prepare_acquisition.py      catalogue → reproducible download manifest
-validate_acquisition.py     final 16 × 107 acquisition gate
+validate_acquisition.py     final 8 × 107 acquisition gate
 radiomics_config.yaml       frozen acquisition settings
 ACQUISITION_PROTOCOL.md     methodological protocol/checklist
 ```
@@ -319,20 +336,20 @@ ACQUISITION_PROTOCOL.md     methodological protocol/checklist
 ## Clinical data integration
 
 A dedicated clinical layer (`oasis_radiomics/clinical/`) links OASIS-3 clinical
-assessments to MRI sessions so radiomic features can later be analysed against
-cognitive status and progression. It contains **no machine learning** and does
-not touch the frozen 16-ROI / 107-feature radiomics protocol; the radiomics
-outputs are read-only inputs.
+assessments to MRI sessions so the consolidated study labels can be generated
+for the classification tasks. It produces `supervised_label`,
+`training_eligible`, and `label_rule_id` while leaving the radiomics outputs as
+read-only inputs.
 
-The full specification lives in **[`CLINICAL_LINKAGE_PROTOCOL.md`](CLINICAL_LINKAGE_PROTOCOL.md)**.
+The full specification lives in `CLINICAL_LINKAGE_PROTOCOL.md`.
 
 ### Required OASIS files
 
 | File | Role |
 |---|---|
-| `OASIS3_UDSd1_diagnoses.csv` | **primary diagnostic source** (NORMCOG, DEMENTED, MCI\*, PROBAD, POSSAD, ...) |
-| `OASIS3_UDSb4_cdr.csv` | CDR (`CDRTOT`, `CDRSUM`), `MMSE` and free-text `dx1`..`dx5`; complements D1 |
-| `OASIS3_UDSc1_cognitive_assessments.csv` | **optional** psychometrics (fluency, Trail Making, logical memory, ...) |
+| `OASIS3_UDSd1_diagnoses.csv` | primary diagnostic source used by the consolidated labels |
+| `OASIS3_UDSb4_cdr.csv` | CDR (`CDRTOT`, `CDRSUM`), `MMSE` and free-text `dx1`..`dx5`; validation/supporting source |
+| `OASIS3_UDSc1_cognitive_assessments.csv` | optional psychometrics (fluency, Trail Making, logical memory, ...) |
 | MRI session catalogue | `Label`, `Subject`, `M/F`, `Age`, `Scanner` |
 
 Source files are read-only and are never modified.
@@ -388,6 +405,9 @@ clinical_mri_gap_days = clinical_day - mri_day      (negative = visit before the
 * C1 is matched **independently**, with its own day, gap and validity columns,
   because psychometric testing rarely falls on the diagnostic visit day.
 
+For the study classifier, sessions labeled as MCI or left unlabeled are not
+used for training.
+
 ### Diagnosis at MRI vs. future conversion
 
 > A diagnosis recorded **after** an MRI never relabels that MRI.
@@ -405,40 +425,21 @@ clinical d0500 = MCI,  d1200 = MCI,  d2000 = AD        MRI at d0800
     days_to_conversion = 1200
 ```
 
-### ⚠️ D1 code mappings require the official data dictionary
-
-The numeric semantics of the D1 variables are defined by the official NACC UDS
-Data Element Dictionary, which is **not part of this repository**. This project
-does not guess at them.
-
-All clinical meaning lives in `clinical_classification.yaml`, which ships
-**unfrozen**. Until it is frozen every visit is reported as:
-
-```
-cognitive_status      = UNKNOWN
-ad_etiology           = UNKNOWN
-classification_status = unresolved_codebook
-```
-
-while **every raw D1/B4/C1 variable is still written to the outputs** (145 + 19
-+ 103 columns), so nothing is lost and no unverified assumption enters the
-dataset. `UNKNOWN` never means "normal". To activate classification, obtain the
-official dictionary, write the rules with a `reference` citation for each, and
-set `codebook_frozen: true`. An empty frozen codebook, an uncited rule, and a
-value outside the controlled vocabulary are all rejected.
-
 ## Supervised labels
 
 A separately versioned layer turns the linked clinical information into
-supervised-learning targets. **No machine learning and no feature selection** -
-labels only. Full specification: **[`SUPERVISED_LABELING_PROTOCOL.md`](SUPERVISED_LABELING_PROTOCOL.md)**.
+supervised-learning targets for the feasibility study. These labels are
+reference targets used to evaluate the pipeline, not a clinical diagnosis. Full
+specification: `SUPERVISED_LABELING_PROTOCOL.md`.
 
-Two targets, deliberately kept apart:
+Main classification target:
 
 ```
-Target A   X(MRI)            ->  y in {CN, MCI, AD}
-Target B   X(MRI while MCI)  ->  y in {MCI_STABLE, MCI_TO_AD}   (+ CENSORED, excluded)
+X(MRI) -> y in {CN, AD}
 ```
+
+Only sessions with `training_eligible = true` are used for model fitting.
+MCI and unlabeled sessions are excluded from the classification dataset.
 
 ```bash
 python cli.py supervised-labels \
@@ -446,62 +447,19 @@ python cli.py supervised-labels \
   --clinical-visits clinical_results/clinical_visits.csv \
   --label-policy supervised_labels.yaml \
   --clinical-window-days 180 \
-  --progression-horizon-days 1095 \
   --output supervised_dataset/
 ```
 
 ```
 supervised_dataset/
-├── supervised_radiomics_sessions.csv   Target A: one row per MRI + all features
-├── supervised_mci_progression.csv      Target B: MCI sessions + outcome
+├── supervised_radiomics_sessions.csv   CN vs AD: one row per MRI + all features
 ├── diagnosis_vocabulary.csv            every dx1..dx5 string and its mapping
 └── supervised_label_audit.json         counts by session AND by subject
 ```
 
-### Labels come from D1, validated against the B4 text
-
-`supervised_labels.yaml` v2.0 uses **D1 as the primary source** and keeps B4 as
-**auxiliary validation**. v1.0 labelled from B4 and found it carries no MCI
-label at all; D1 has explicit MCI variables and an aetiology block, so it
-expresses the full taxonomy:
-
-| D1 | label |
-|---|---|
-| `NORMCOG` | `CN` |
-| `MCIAMEM` / `MCIAPLUS` / `MCINON1` / `MCINON2` | `MCI` |
-| `IMPNOMCI` | `IMPAIRED_NOT_MCI` |
-| `DEMENTED` + `PROBAD`/`POSSAD`/`alzdis` | `AD` |
-| `DEMENTED` + `DLB`/`VASC`/`FTD`/… | `OTHER_DEMENTIA` |
-| `DEMENTED`, aetiology not established | `DEMENTIA_UNKNOWN_ETIOLOGY` |
-
-The D1 coding is **not assumed** - it is validated against the independent B4
-text over the 8475 visits carrying both instruments (`NORMCOG` 99.7 % CN,
-`DEMENTED` 92.6 % dementia, `PROBAD` 98.1 % AD, `FTD` 100 % non-AD). Every row
-records the outcome in `b4_agreement`; on the real cohort **93.4 %** agree.
-B4 never overrides D1 - a disagreement is warned, not applied.
-
-Values outside `{0, 1}` are never guessed (D1 has three such cells). Two
-cognitive states firing at once give `CONFLICTING`, not a priority win.
-
-Aetiology spans both UDS generations (`PROBAD`/`POSSAD` and `alzdis`), which are
-disjoint in OASIS-3. Their paired `…IF` qualifiers are **not** binary — domain
-`{0, 1, 2}`, where 2 means AD *contributes* rather than causes — so a
-contributing-only aetiology does not enter the `AD` class. MCI subtype and
-impaired domains are recorded in `mci_subtype` / `mci_domains`.
-
-CDR and MMSE remain covariates and cross-checks only. `CDRTOT == 0.5` does
-**not** mean MCI.
-
-### Two rules that must not be relaxed
-
-**`CENSORED` is not `MCI_STABLE`.** Stability requires a non-AD sighting at or
-after the horizon. A participant who leaves follow-up six months after an MCI
-scan has an unobserved outcome, not a stable one.
-
-**Split by `subject_id`, never by row.** One participant contributes several MRI
-sessions; row-wise splitting puts `OAS30001` in both train and test. Use
-`subject_groups(rows)` as `groups` for `GroupKFold`, and
-`assert_no_subject_leakage(train, test)` to verify.
+`supervised_label` is the study target, `training_eligible` marks whether a row
+enters model fitting, and `label_rule_id` records the rule path used to derive
+the label.
 
 ## Tests
 

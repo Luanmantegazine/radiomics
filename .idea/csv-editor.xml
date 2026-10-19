@@ -3,6 +3,13 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="/README.md">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/clinical_radiomics_CONSOLIDATED_v2 (1).csv">
           <value>
             <Attribute>
@@ -24,7 +31,49 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/morpho_tier/freesurfer_ids_139.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/morpho_tier/morpho_tier.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier2.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier3.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier_292.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier_final_284.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/morpho_tier/morpho_tier_partial.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

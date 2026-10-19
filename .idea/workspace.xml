@@ -7,19 +7,90 @@
     <option name="selectedModelId" value="auto" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="6a06cc45-5c00-4ed7-9fcf-8f34216ed0a0" name="Changes" comment="Update lote radiomic extraction">
-      <change afterPath="$PROJECT_DIR$/download/oasis3_freesurfer_index.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/build_template.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/common.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/extract_freesurfer.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/freesurfer_ids_139.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/morpho_fs_id_map.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/morpho_model.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/morpho_tier_partial.csv" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/morpho_tier/morpho_tier_template.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/freesurfer_download_preflight.csv" beforeDir="false" afterPath="$PROJECT_DIR$/outputs/morphometry_audit/freesurfer_download_preflight.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_download_manifest.csv" beforeDir="false" afterPath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_download_manifest.csv" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_extraction_report.md" beforeDir="false" afterPath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_extraction_report.md" afterDir="false" />
+    <list default="true" id="6a06cc45-5c00-4ed7-9fcf-8f34216ed0a0" name="Changes" comment="Update radiomic extraction">
+      <change beforePath="$PROJECT_DIR$/ACQUISITION_PROTOCOL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/CLINICAL_LINKAGE_PROTOCOL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SUPERVISED_LABELING_PROTOCOL.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_labels/diagnosis_vocabulary.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /acquisition_labels/diagnosis_vocabulary.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_labels/supervised_label_audit.json" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /acquisition_labels/supervised_label_audit.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_labels/supervised_mci_progression.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /acquisition_labels/supervised_mci_progression.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_labels/supervised_radiomics_sessions.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /acquisition_labels/supervised_radiomics_sessions.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_resume_untried_ids.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/acquisition_strategic_ids.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/clinical_classification.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /clinical_classification.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/clinical_radiomics_CONSOLIDATED_v2 (1).csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/clinical_radiomics_CONSOLIDATED_v3.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dataset_final/clinical_radiomics_deltas.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dataset_final/clinical_radiomics_sessions.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/dataset_final/clinical_radiomics_subjects.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/download/acquisition_strategic_manifest.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /download/acquisition_strategic_manifest.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/download/acquisition_target_only_mci_ad_ids.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /download/acquisition_target_only_mci_ad_ids.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/download/oasis3_freesurfer_index.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /download/oasis3_freesurfer_index.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/freesurfer_ids.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/fusion.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/build_template.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/build_template.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/common.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/common.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/extract_freesurfer.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/extract_freesurfer.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/freesurfer_ids_139.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/morpho_fs_id_map.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/morpho_fs_id_map.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/morpho_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/morpho_model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/morpho_tier_partial.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/morpho_tier_partial.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/morpho_tier/morpho_tier_template.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /morpho_tier/morpho_tier_template.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis3_segmented_to_radiomics.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis3_segmented_to_radiomics.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/acquisition.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/acquisition.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/cli.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/cli.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/__init__.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/__init__.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/classification.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/classification.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/labels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/matching.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/matching.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/readers.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/readers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/trajectories.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/trajectories.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical/validation.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical/validation.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/clinical_dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/clinical_dataset.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/discovery.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/discovery.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/download_oasis.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/download_oasis.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/ids.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/ids.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/logging_setup.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/logging_setup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/longitudinal.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/longitudinal.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/masks.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/masks.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/metadata.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/metadata.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/morphometry.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/morphometry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/pipeline.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/pipeline.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/protocol.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/protocol.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/quality_control.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/quality_control.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/radiomics_extractor.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/radiomics_extractor.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/supervised_dataset.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/supervised_dataset.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/oasis_radiomics/tables.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /oasis_radiomics/tables.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/freesurfer_download_preflight.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/freesurfer_download_preflight.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/freesurfer_reprocessing_manifest.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/freesurfer_reprocessing_manifest.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_conflicts.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/morphometry_conflicts.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_download_manifest.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/morphometry_download_manifest.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_extraction_report.md" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/morphometry_extraction_report.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_inventory.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/morphometry_inventory.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/morphometry_missing_sessions.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/morphometry_missing_sessions.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/outputs/morphometry_audit/session_substitutions.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /outputs/morphometry_audit/session_substitutions.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/prepare_acquisition.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /prepare_acquisition.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/acquisition_validation.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/quality_control.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/radiomics_features_long.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/radiomics_features_wide.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/radiomics_longitudinal_deltas.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/radiomics_longitudinal_slopes.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/results_new/run_metadata.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/audit_freesurfer_availability.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /scripts/audit_freesurfer_availability.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/backfill_clinical_labels.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /scripts/backfill_clinical_labels.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scripts/extract_freesurfer_morphometry.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /scripts/extract_freesurfer_morphometry.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/supervised_final/diagnosis_vocabulary.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /supervised_final/diagnosis_vocabulary.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/supervised_final/supervised_label_audit.json" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /supervised_final/supervised_label_audit.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/supervised_final/supervised_mci_progression.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /supervised_final/supervised_mci_progression.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/supervised_final/supervised_radiomics_sessions.csv" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /supervised_final/supervised_radiomics_sessions.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/supervised_radiomics_sessions_final.csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/validate_acquisition.py" beforeDir="false" afterPath="$PROJECT_DIR$/dataset /validate_acquisition.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -161,7 +232,7 @@
     "copilot.chat.legacySessionMetadata.migrated": "true",
     "git-widget-placeholder": "master",
     "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "/Users/luanr/vscode/radiomics/radiomics",
+    "last_opened_file_path": "/Users/luanr/vscode/radiomics/radiomics/morpho_tier",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
     "node.js.selected.package.eslint": "(autodetect)",
@@ -174,8 +245,12 @@
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/morpho_tier" />
       <recent name="$PROJECT_DIR$" />
       <recent name="$PROJECT_DIR$/download" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/dataset " />
     </key>
   </component>
   <component name="SharedIndexes">
@@ -195,7 +270,7 @@
       <updated>1790687802429</updated>
       <workItem from="1790687803703" duration="99650000" />
       <workItem from="1790914727619" duration="52342000" />
-      <workItem from="1792158267786" duration="26056000" />
+      <workItem from="1792158267786" duration="49705000" />
     </task>
     <task id="LOCAL-00001" summary="Update lote radiomic extraction">
       <option name="closed" value="true" />
@@ -213,7 +288,15 @@
       <option name="project" value="LOCAL" />
       <updated>1792168396750</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="Update radiomic extraction">
+      <option name="closed" value="true" />
+      <created>1792244232771</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1792244232771</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -232,6 +315,7 @@
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="Update lote radiomic extraction" />
-    <option name="LAST_COMMIT_MESSAGE" value="Update lote radiomic extraction" />
+    <MESSAGE value="Update radiomic extraction" />
+    <option name="LAST_COMMIT_MESSAGE" value="Update radiomic extraction" />
   </component>
 </project>
