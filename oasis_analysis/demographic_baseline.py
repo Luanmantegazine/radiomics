@@ -43,11 +43,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-DEFAULT_INPUT = Path(
-    "output/filter_supervised_labels/radiomics_sessions_cn_ad_simplified.csv"
-)
-DEFAULT_OUTPUT_DIR = Path("output/demographic_baseline")
-LOG_DIR = Path("logs")
+ANALYSIS_ROOT = Path(__file__).resolve().parent
+DEFAULT_INPUT = ANALYSIS_ROOT / "output/filter_supervised_labels/radiomics_sessions_cn_ad_simplified.csv"
+DEFAULT_OUTPUT_DIR = ANALYSIS_ROOT / "output/demographic_baseline"
+LOG_DIR = ANALYSIS_ROOT / "logs"
 PREDICTORS = ["age_at_mri", "sex"]
 REQUIRED_COLUMNS = ["subject_id", "session_id", *PREDICTORS, "supervised_label"]
 LABEL_TO_INT = {"CN": 0, "AD": 1}

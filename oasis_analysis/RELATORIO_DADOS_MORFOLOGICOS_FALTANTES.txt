@@ -1,0 +1,83 @@
+RELATÓRIO DE DADOS MORFOLÓGICOS FALTANTES
+========================================
+
+Arquivo analisado: oasis_analysis/input/clinical_radiomics_CONSOLIDATED_v2.csv
+Verificação: 2.293 colunas e 362 linhas; busca pelos nomes das colunas e por
+sinônimos usuais de volume intracraniano, ventrículo e espessura cortical.
+
+1. DADO OBRIGATÓRIO FALTANTE
+---------------------------
+
+eTIV (EstimatedTotalIntraCranialVol), em mm³.
+
+Não foi encontrada coluna de eTIV, ICV, TIV ou volume intracraniano. O eTIV é
+necessário para ajustar os volumes anatômicos pelo tamanho da cabeça, conforme
+a especificação inicial. Não pode ser recuperado pela soma dos volumes de
+hipocampo nem das demais máscaras presentes no CSV. No FreeSurfer, costuma
+constar em <sessão>/stats/aseg.stats.
+
+2. DADOS FORTEMENTE RECOMENDADOS, MAS NÃO OBRIGATÓRIOS
+------------------------------------------------------
+
+- Volume de Left-Inf-Lat-Vent, em mm³.
+- Volume de Right-Inf-Lat-Vent, em mm³.
+
+Não foram encontradas colunas referentes aos ventrículos laterais inferiores.
+A descrição inicial recomenda esses dois marcadores, mas não os estabelece
+como condição para o modelo mínimo de oito ROIs.
+
+3. DADOS CONDICIONADOS À ESCOLHA DA MEDIDA CORTICAL
+--------------------------------------------------
+
+- Espessura média (ThickAvg) do entorrinal esquerdo e direito, em mm.
+- Espessura média (ThickAvg) do parahipocampal esquerdo e direito, em mm.
+
+Não foi encontrada nenhuma coluna de espessura cortical. Essas quatro medidas
+seriam necessárias se o modelo optar por espessura para as ROIs corticais.
+A especificação também permite volume cortical: o CSV já contém volumes de
+máscara das quatro ROIs corticais correspondentes. A espessura, se obtida,
+normalmente não deve ser ajustada por eTIV.
+
+4. DADOS EXPLICITAMENTE OPCIONAIS E AUSENTES
+-------------------------------------------
+
+- Volume de Left-Lateral-Ventricle e Right-Lateral-Ventricle.
+- Volume total de substância cinzenta cortical.
+
+Nenhuma dessas medidas foi identificada no CSV. Sua ausência não impede a
+versão mínima do modelo descrita acima.
+
+5. MEDIDAS ANATÔMICAS JÁ DISPONÍVEIS
+-----------------------------------
+
+O CSV contém volumes de máscara, separados por lado, para as oito ROIs
+prioritárias. As oito colunas têm valores positivos nas 362 linhas:
+
+- Hipocampo: mask_volume_mm3_left; mask_volume_mm3_right.
+- Amígdala: mask_volume_mm3_left_amygdala;
+  mask_volume_mm3_right_amygdala.
+- Entorrinal: mask_volume_mm3_left_entorhinal;
+  mask_volume_mm3_right_entorhinal.
+- Parahipocampal: mask_volume_mm3_left_parahippocampal;
+  mask_volume_mm3_right_parahippocampal.
+
+hippocampal_volume_total é a soma dos dois volumes hipocampais de máscara.
+original_shape_MeshVolume_total também se refere aos hipocampos; é a soma das
+estimativas de volume baseadas em malha. Nenhum dos dois é eTIV.
+
+Os volumes de máscara são derivados de aparc+aseg.mgz. Se o método exigir
+especificamente os valores tabulados em aseg.stats para hipocampo e amígdala,
+será necessário extrair essas quatro medidas adicionais. Elas representam
+regiões já presentes no CSV, mas com origem de medição diferente.
+
+6. MODOS DO SCRIPT DE PREPARAÇÃO
+-------------------------------
+
+Por padrão, prepare_morphological_features.py exige somente eTIV além das
+oito colunas de volumes de máscara já disponíveis no CSV filtrado.
+
+A flag --extended-data ativa a especificação mais restrita: volumes de
+aseg.stats para hipocampo, amígdala e ventrículo lateral inferior, bilaterais,
+e quatro espessuras de aparc.stats. Os nomes completos dessas colunas no
+script são uma convenção de integração definida no projeto, não os cabeçalhos
+originais dos arquivos .stats do FreeSurfer.
