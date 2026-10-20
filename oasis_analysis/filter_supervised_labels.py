@@ -87,7 +87,8 @@ def filter_csv(
         raise ValueError("All input and output paths must differ.")
 
     data = pd.read_csv(input_path, low_memory=False)
-    required_columns = set(SIMPLIFIED_COLUMNS) | {GAP_COLUMN}
+    # Demographics are optional: the FreeSurfer morphometry export has none.
+    required_columns = {SUBJECT_COLUMN, "session_id", LABEL_COLUMN, GAP_COLUMN}
     missing_columns = required_columns.difference(data.columns)
     if missing_columns:
         missing = ", ".join(sorted(missing_columns))
@@ -120,7 +121,8 @@ def filter_csv(
     simplified_path.parent.mkdir(parents=True, exist_ok=True)
     discarded_path.parent.mkdir(parents=True, exist_ok=True)
     filtered_data.to_csv(output_path, index=False)
-    filtered_data[SIMPLIFIED_COLUMNS].to_csv(simplified_path, index=False)
+    simplified_columns = [column for column in SIMPLIFIED_COLUMNS if column in data.columns]
+    filtered_data[simplified_columns].to_csv(simplified_path, index=False)
     discarded_data.to_csv(discarded_path, index=False)
 
     kept_counts = filtered_data[LABEL_COLUMN].value_counts()

@@ -18,6 +18,7 @@ from oasis_analysis.morphological_model import (
 )
 from oasis_analysis.prepare_morphological_features import (
     DEFAULT_SOURCE_COLUMNS,
+    EXTENDED_SOURCE_ALIASES,
     EXTENDED_SOURCE_COLUMNS,
 )
 
@@ -125,6 +126,27 @@ class MorphologicalModelTests(unittest.TestCase):
         self.assertIn("roc_auc_ci95_low", metrics)
         self.assertIn("brier_score", metrics)
         self.assertTrue((self.output / "calibration.png").exists())
+
+    def test_extended_mode_accepts_fs_tier_headers(self) -> None:
+        original = cohort()
+        data = original.loc[:, ["subject_id", "session_id", "supervised_label"]].copy()
+        for target, source in EXTENDED_SOURCE_COLUMNS.items():
+            alias = EXTENDED_SOURCE_ALIASES[source]
+            if target == "etiv_mm3":
+                data[alias] = original["EstimatedTotalIntraCranialVol"]
+            elif target.endswith("_thickness_mm"):
+                data[alias] = 2.0 + original.index * 0.1 + (original.index < 6) * 0.5
+            else:
+                data[alias] = original["mask_volume_mm3_left"]
+        data.to_csv(self.input, index=False)
+        small_grid = (LogisticRegression(max_iter=2000), {"classifier__C": [1.0]})
+        with patch("oasis_analysis.morphological_model.classifier_and_grid",
+                   return_value=small_grid):
+            metrics = run_model(
+                self.input, self.output, extended_data=True, outer_folds=3,
+                inner_folds=2, bootstrap_resamples=100,
+            )
+        self.assertEqual(metrics["participants"], 12)
 
 
 if __name__ == "__main__":

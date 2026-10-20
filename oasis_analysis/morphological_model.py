@@ -56,6 +56,7 @@ from oasis_analysis.prepare_morphological_features import (
     DEFAULT_ASYMMETRY_PAIRS,
     DEFAULT_SOURCE_COLUMNS,
     EXTENDED_ASYMMETRY_PAIRS,
+    EXTENDED_SOURCE_ALIASES,
     EXTENDED_SOURCE_COLUMNS,
     adjusted_name,
     make_validation_folds,
@@ -153,11 +154,18 @@ def load_cohort(path: Path, *, extended_data: bool, outer_folds: int) -> pd.Data
     if duplicates:
         raise ValueError(f"Duplicate input columns: {', '.join(duplicates)}")
     mapping = EXTENDED_SOURCE_COLUMNS if extended_data else DEFAULT_SOURCE_COLUMNS
+    # Accept the fs_* headers of the consolidated FreeSurfer export when the
+    # canonical column is absent.
+    renames = {
+        EXTENDED_SOURCE_ALIASES[source]: source for source in mapping.values()
+        if source not in header and EXTENDED_SOURCE_ALIASES.get(source) in header
+    }
+    available = {renames.get(name, name) for name in header}
     needed = ["subject_id", "session_id", "supervised_label", *mapping.values()]
-    missing = sorted(set(needed) - set(header))
+    missing = sorted(set(needed) - available)
     if missing:
         raise ValueError(f"Required input columns are absent: {', '.join(missing)}")
-    data = pd.read_csv(path, usecols=needed, low_memory=False)
+    data = pd.read_csv(path, low_memory=False).rename(columns=renames).loc[:, needed]
     if data.empty or data[needed].isna().any().any():
         raise ValueError("Input cohort is empty or has missing required values.")
     if data["subject_id"].duplicated().any() or data["session_id"].duplicated().any():

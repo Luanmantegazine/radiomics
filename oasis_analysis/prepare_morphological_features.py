@@ -43,6 +43,20 @@ EXTENDED_SOURCE_COLUMNS = {
     "left_parahippocampal_thickness_mm": "lh.aparc.parahippocampal.ThickAvg",
     "right_parahippocampal_thickness_mm": "rh.aparc.parahippocampal.ThickAvg",
 }
+# Headers used by the consolidated FreeSurfer tier export (morpho_tier_consolidado.csv).
+EXTENDED_SOURCE_ALIASES = {
+    "EstimatedTotalIntraCranialVol": "fs_etiv_mm3",
+    "aseg.Left-Hippocampus.Volume_mm3": "fs_left_hippocampus_mm3",
+    "aseg.Right-Hippocampus.Volume_mm3": "fs_right_hippocampus_mm3",
+    "aseg.Left-Amygdala.Volume_mm3": "fs_left_amygdala_mm3",
+    "aseg.Right-Amygdala.Volume_mm3": "fs_right_amygdala_mm3",
+    "aseg.Left-Inf-Lat-Vent.Volume_mm3": "fs_left_inf_lat_vent_mm3",
+    "aseg.Right-Inf-Lat-Vent.Volume_mm3": "fs_right_inf_lat_vent_mm3",
+    "lh.aparc.entorhinal.ThickAvg": "fs_lh_entorhinal_thickavg_mm",
+    "rh.aparc.entorhinal.ThickAvg": "fs_rh_entorhinal_thickavg_mm",
+    "lh.aparc.parahippocampal.ThickAvg": "fs_lh_parahippocampal_thickavg_mm",
+    "rh.aparc.parahippocampal.ThickAvg": "fs_rh_parahippocampal_thickavg_mm",
+}
 DEFAULT_ASYMMETRY_PAIRS = {
     "hippocampus_asymmetry": ("left_hippocampus_mm3", "right_hippocampus_mm3"),
     "amygdala_asymmetry": ("left_amygdala_mm3", "right_amygdala_mm3"),
