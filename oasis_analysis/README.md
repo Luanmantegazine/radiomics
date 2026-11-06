@@ -94,14 +94,35 @@ The default model uses:
 - classifier: balanced logistic regression with a 0.5 decision threshold;
 - primary metric: ROC-AUC.
 
+The demographic pipeline also implements the same alternative classifiers as
+the morphological pipeline: Elastic Net logistic regression, SVM, Random
+Forest, and XGBoost. Select one with `--classifier elasticnet`,
+`--classifier svm`, `--classifier rf`, or `--classifier xgboost`. The original
+plain logistic model remains the default as `--classifier logistic` for
+backward compatibility.
+
+Alternative classifiers use nested validation: within each outer training
+fold, a three-fold `StratifiedGroupKFold` search selects the same
+hyperparameters and ROC-AUC objective as the morphological pipeline. The
+held-out outer fold is never used for model selection. Set the inner fold count
+with `--inner-folds`.
+
+```bash
+python oasis_analysis/cli.py run demographic_baseline -- \
+  --input output/filter_supervised_labels/clinical_radiomic_cn_ad_simplified.csv \
+  --classifier elasticnet --inner-folds 3
+```
+
 The validation fold is used only for prediction. Scaling, encoding, and model
 fitting use the corresponding training folds, and every participant receives
 exactly one out-of-fold prediction.
 
 Generated artifacts include OOF predictions, fold assignments, train and
-validation tables, fitted fold pipelines, coefficients, metrics, split audits,
-hash manifests, the cohort summary, ROC/precision-recall curves, and the OOF
-confusion matrix.
+validation tables, fitted fold pipelines, coefficients or feature importances,
+inner-search tables for tuned classifiers, metrics, split audits, hash
+manifests, the cohort summary, ROC/precision-recall curves, and the OOF
+confusion matrix. Classification metrics use `recall` for the AD positive-class
+recall; no separate sensitivity alias is written.
 
 ## Morphological feature preparation
 
@@ -231,8 +252,10 @@ flags can be combined. `--outer-folds`, `--inner-folds`, `--random-state`,
 The output directory contains pooled outer-fold predictions, per-fold model
 files, inner search tables, fold metrics, a calibration table and plot, and
 `metrics.json` with pooled ROC-AUC and a stratified subject-bootstrap 95% CI,
-balanced accuracy, sensitivity, specificity, Brier score and expected
-calibration error. `run_config.json` records each fold's hyperparameters,
+balanced accuracy, AD recall, specificity, Brier score
+and expected calibration error. `performance_curves.png` shows the pooled ROC and
+precision-recall curves, and `confusion_matrix.png` shows the pooled out-of-fold
+classifications. `run_config.json` records each fold's hyperparameters,
 CN-only eTIV fits and z-score parameters. Synthetic eTIV input is for pipeline
 tests only; its metrics must not be interpreted as scientific performance.
 

@@ -44,8 +44,10 @@ from sklearn.metrics import (
     f1_score,
     log_loss,
     precision_score,
+    precision_recall_curve,
     recall_score,
     roc_auc_score,
+    roc_curve,
 )
 from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
@@ -228,12 +230,13 @@ def classification_metrics(y: np.ndarray, probability: np.ndarray,
                            threshold: float) -> dict[str, float | int]:
     prediction = (probability >= threshold).astype(int)
     tn, fp, fn, tp = confusion_matrix(y, prediction, labels=[0, 1]).ravel()
+    recall = float(recall_score(y, prediction, zero_division=0))
     return {
         "roc_auc": float(roc_auc_score(y, probability)),
         "average_precision": float(average_precision_score(y, probability)),
         "accuracy": float(accuracy_score(y, prediction)),
         "balanced_accuracy": float(balanced_accuracy_score(y, prediction)),
-        "sensitivity": float(recall_score(y, prediction, zero_division=0)),
+        "recall": recall,
         "specificity": float(tn / (tn + fp)) if tn + fp else float("nan"),
         "precision": float(precision_score(y, prediction, zero_division=0)),
         "f1": float(f1_score(y, prediction, zero_division=0)),
@@ -291,6 +294,63 @@ def save_calibration_plot(table: pd.DataFrame, path: Path) -> None:
     axis.legend()
     fig.tight_layout()
     fig.savefig(path, dpi=180)
+    plt.close(fig)
+
+
+def save_performance_curves(
+    y_true: np.ndarray,
+    probability: np.ndarray,
+    metrics: dict[str, float | int],
+    path: Path,
+) -> None:
+    fpr, tpr, _ = roc_curve(y_true, probability)
+    precision, recall, _ = precision_recall_curve(y_true, probability)
+    prevalence = float(np.mean(y_true))
+
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    axes[0].plot(fpr, tpr, linewidth=2, label=f"AUC = {metrics['roc_auc']:.3f}")
+    axes[0].plot([0, 1], [0, 1], linestyle="--", color="0.55", label="Chance")
+    axes[0].set(xlabel="False-positive rate", ylabel="True-positive rate", title="ROC curve")
+    axes[0].legend(loc="lower right")
+    axes[0].grid(alpha=0.2)
+
+    axes[1].plot(recall, precision, linewidth=2,
+                 label=f"AP = {metrics['average_precision']:.3f}")
+    axes[1].axhline(prevalence, linestyle="--", color="0.55",
+                    label=f"Prevalence = {prevalence:.3f}")
+    axes[1].set(xlabel="Recall", ylabel="Precision", title="Precision-recall curve")
+    axes[1].legend(loc="lower left")
+    axes[1].grid(alpha=0.2)
+
+    fig.suptitle("Morphological model: pooled out-of-fold performance")
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+
+
+def save_confusion_matrix(
+    metrics: dict[str, float | int], path: Path, threshold: float,
+) -> None:
+    matrix = np.array([
+        [metrics["true_negative"], metrics["false_positive"]],
+        [metrics["false_negative"], metrics["true_positive"]],
+    ])
+    fig, axis = plt.subplots(figsize=(5.2, 4.5))
+    image = axis.imshow(matrix, cmap="Blues")
+    for row in range(2):
+        for column in range(2):
+            color = "white" if matrix[row, column] > matrix.max() / 2 else "black"
+            axis.text(column, row, str(matrix[row, column]), ha="center", va="center",
+                      color=color, fontsize=14)
+    axis.set(
+        xticks=[0, 1], yticks=[0, 1],
+        xticklabels=["CN", "AD"], yticklabels=["CN", "AD"],
+        xlabel=f"Predicted class (threshold = {threshold:g})",
+        ylabel="True class", title="OOF confusion matrix",
+    )
+    fig.colorbar(image, ax=axis, fraction=0.046, pad=0.04)
+    fig.tight_layout()
+    fig.savefig(path, dpi=180, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -408,6 +468,8 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
     pd.DataFrame(fold_metrics).to_csv(output_dir / "fold_metrics.csv", index=False)
     calibration.to_csv(output_dir / "calibration.csv", index=False)
     save_calibration_plot(calibration, output_dir / "calibration.png")
+    save_performance_curves(y, probability, metrics, output_dir / "performance_curves.png")
+    save_confusion_matrix(metrics, output_dir / "confusion_matrix.png", threshold)
     (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
     software = {"python": platform.python_version(), "numpy": np.__version__,
                 "pandas": pd.__version__, "scikit_learn": sklearn.__version__}
