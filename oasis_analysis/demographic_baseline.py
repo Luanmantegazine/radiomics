@@ -45,16 +45,20 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.svm import SVC
 
 
-DEFAULT_INPUT = Path(
-    "output/filter_supervised_labels/radiomics_sessions_cn_ad_simplified.csv"
+ANALYSIS_DIR = Path(__file__).resolve().parent
+DEFAULT_INPUT = (
+    ANALYSIS_DIR
+    / "output/filter_supervised_labels/radiomics_sessions_cn_ad_simplified.csv"
 )
-DEFAULT_OUTPUT_DIR = Path("output/demographic_baseline")
-LOG_DIR = Path("logs")
+DEFAULT_OUTPUT_DIR = ANALYSIS_DIR / "output/demographic_baseline"
+LOG_DIR = ANALYSIS_DIR / "logs"
 PREDICTORS = ["age_at_mri", "sex"]
 REQUIRED_COLUMNS = ["subject_id", "session_id", *PREDICTORS, "supervised_label"]
 LABEL_TO_INT = {"CN": 0, "AD": 1}
 SEX_CATEGORIES = ["F", "M"]
 CLASSIFIERS = ("logistic", "elasticnet", "svm", "rf", "xgboost")
+# Shared with morphological_model.py so both pipelines tune the same grid.
+ELASTICNET_C_GRID = (0.003, 0.01, 0.03, 0.1, 1.0)
 LOGGER = logging.getLogger(__name__)
 
 
@@ -186,8 +190,8 @@ def classifier_and_grid(
             random_state=random_state,
         )
         grid = {
-            "classifier__C": [0.1, 1.0, 10.0],
-            "classifier__l1_ratio": [0.1, 0.5, 0.9],
+            "classifier__C": list(ELASTICNET_C_GRID),
+            "classifier__l1_ratio": [0.5],
         }
     elif name == "svm":
         estimator = SVC(
@@ -473,6 +477,11 @@ def run_baseline(
         if overlap:
             raise RuntimeError(f"Participant leakage detected in fold {fold}: {sorted(overlap)}")
 
+        fold_template = clone(pipeline)
+        if classifier == "xgboost":
+            # Match class_weight="balanced" used by the other classifiers.
+            negatives, positives = np.bincount(y[train_index], minlength=2)
+            fold_template.set_params(classifier__scale_pos_weight=negatives / positives)
         if parameter_grid:
             inner_splits = checked_inner_splits(
                 x.iloc[train_index],
@@ -483,7 +492,7 @@ def run_baseline(
                 fold,
             )
             search = GridSearchCV(
-                clone(pipeline),
+                fold_template,
                 parameter_grid,
                 scoring="roc_auc",
                 cv=inner_splits,
@@ -508,7 +517,7 @@ def run_baseline(
                 }
             )
         else:
-            fold_pipeline = clone(pipeline)
+            fold_pipeline = fold_template
             fold_pipeline.fit(x.iloc[train_index], y[train_index])
             fold_search_details.append(
                 {"fold": fold, "inner_best_auc": None, "best_params": {}}

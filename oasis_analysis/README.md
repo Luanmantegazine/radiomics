@@ -11,8 +11,9 @@ The workflow currently performs these steps:
 
 1. `filter_supervised_labels.py` prepares one consistently labelled CN or AD
    session per participant. It removes participants with conflicting CN/AD
-   labels and selects the eligible session with the smallest absolute
-   `clinical_mri_gap_days`.
+   labels, drops sessions whose `training_eligible` flag is false (when the
+   column is present), and selects the eligible session with the smallest
+   absolute `clinical_mri_gap_days`.
 2. `demographic_baseline.py` evaluates a leakage-safe logistic-regression
    baseline using only age and sex, with out-of-fold predictions from
    `StratifiedGroupKFold`.
@@ -21,6 +22,8 @@ The workflow currently performs these steps:
 4. `morphological_model.py` performs nested, subject-grouped model selection
    and evaluation using the original measurements, refitting all preprocessing
    inside each training split.
+5. `compare_models.py` compares two models' out-of-fold predictions on the same
+   participants with DeLong's paired test and a paired bootstrap.
 
 The input used for the copied analysis is `input/radiomics_sessions.csv`. The
 filtered cohort is written to
@@ -36,6 +39,7 @@ oasis_analysis/
 ├── demographic_baseline.py
 ├── prepare_morphological_features.py
 ├── morphological_model.py
+├── compare_models.py
 ├── requirements.txt
 ├── input/
 ├── logs/
@@ -99,7 +103,10 @@ the morphological pipeline: Elastic Net logistic regression, SVM, Random
 Forest, and XGBoost. Select one with `--classifier elasticnet`,
 `--classifier svm`, `--classifier rf`, or `--classifier xgboost`. The original
 plain logistic model remains the default as `--classifier logistic` for
-backward compatibility.
+backward compatibility. Elastic Net searches
+`C ∈ {0.003, 0.01, 0.03, 0.1, 1}` with `l1_ratio = 0.5`, the same grid as the
+morphological model; XGBoost sets `scale_pos_weight` to the CN/AD ratio of each
+outer training fold, matching the balanced class weights of the other models.
 
 Alternative classifiers use nested validation: within each outer training
 fold, a three-fold `StratifiedGroupKFold` search selects the same
@@ -242,8 +249,24 @@ training set and predicts its held-out participants. The optional
 `--fold-assignments` reuses the demographic baseline's outer folds; without
 it, the same five-fold splitter and seed 42 are used.
 
+`--adjust-age-sex` replaces the eTIV-only residuals with a CN-normative
+(W-score style) adjustment: every volume is regressed on eTIV, age and sex, and
+every cortical thickness on age and sex, using only the CN rows of the training
+split. Without it, age-related atrophy is read as disease: in the 222-participant
+CN/AD cohort the eTIV-only model's false positives were mostly older CN and its
+false negatives younger AD participants. `--include-demographics` adds
+`age_at_mri` and a male indicator as features. Both flags need `age_at_mri` and
+`sex` (`F`/`M`) in the input; `--proportional` combined with
+`--adjust-age-sex` regresses `volume / eTIV` on age and sex.
+
+The Elastic Net grid is `C ∈ {0.003, 0.01, 0.03, 0.1, 1}` with `l1_ratio = 0.5`.
+On the CN/AD cohort the earlier grid (`C ∈ {0.1, 1, 10}`, `l1_ratio ∈ {0.1, 0.5,
+0.9}`) selected its smallest C in every fold, and `l1_ratio` changed the inner
+AUC by at most 0.008.
+
 `--classifier svm`, `--classifier rf` and `--classifier xgboost` select the
-secondary classifiers. XGBoost is installed through this folder's requirements.
+secondary classifiers. XGBoost receives `scale_pos_weight` equal to the CN/AD
+ratio of each outer training fold. XGBoost is installed through this folder's requirements.
 `--proportional` chooses `volume / eTIV`; `--extended-data` requires the
 FreeSurfer stats columns; `--asymmetry` adds the bilateral indices. These
 flags can be combined. `--outer-folds`, `--inner-folds`, `--random-state`,
@@ -252,11 +275,41 @@ flags can be combined. `--outer-folds`, `--inner-folds`, `--random-state`,
 The output directory contains pooled outer-fold predictions, per-fold model
 files, inner search tables, fold metrics, a calibration table and plot, and
 `metrics.json` with pooled ROC-AUC and a stratified subject-bootstrap 95% CI,
+the mean and SD of the per-fold ROC-AUC,
 balanced accuracy, AD recall, specificity, Brier score
 and expected calibration error. `performance_curves.png` shows the pooled ROC and
 precision-recall curves, and `confusion_matrix.png` shows the pooled out-of-fold
 classifications. `run_config.json` records each fold's hyperparameters,
-CN-only eTIV fits and z-score parameters. Synthetic eTIV input is for pipeline
+CN-only fits and z-score parameters. Files from an earlier run
+(`fold_*_model.joblib`, `fold_*_inner_search.csv`, `fold_*_validation.csv`) are
+removed first, so a run with fewer folds leaves no stale results.
+
+Pass the demographic baseline's `fold_assignments.csv` explicitly for any run
+that will be compared with it. The configuration chosen for the closed
+morphological model is:
+
+```bash
+python oasis_analysis/cli.py run morphological_model -- \
+  --input output/filter_supervised_labels/<cohort>_cn_ad.csv \
+  --extended-data --adjust-age-sex --include-demographics \
+  --fold-assignments output/demographic_baseline/fold_assignments.csv
+```
+
+## Paired model comparison
+
+`compare_models.py` reads two `oof_predictions.csv` files, aligns them by
+`subject_id` and `session_id`, and refuses files with different participants
+or labels. It reports DeLong's test for correlated ROC-AUCs (difference A − B,
+95% CI and p-value) and a stratified participant bootstrap of the same
+difference, and warns when the two runs used different folds.
+
+```bash
+python oasis_analysis/cli.py run compare_models -- \
+  --a output/morphological_model/oof_predictions.csv --name-a morphological \
+  --b output/demographic_baseline/oof_predictions.csv --name-b demographic
+```
+
+The result is written to `output/compare_models/<name-a>_vs_<name-b>.json`. Synthetic eTIV input is for pipeline
 tests only; its metrics must not be interpreted as scientific performance.
 
 ## Parent-CLI integration
