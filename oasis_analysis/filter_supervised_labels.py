@@ -23,7 +23,7 @@ SIMPLIFIED_COLUMNS = [
     LABEL_COLUMN,
 ]
 SCRIPT_NAME = Path(__file__).stem
-OUTPUT_DIR = Path("output") / SCRIPT_NAME
+OUTPUT_DIR = Path(__file__).resolve().parent / "output" / SCRIPT_NAME
 LOG_DIR = OUTPUT_DIR
 LOGGER = logging.getLogger(__name__)
 

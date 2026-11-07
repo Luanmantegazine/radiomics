@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate an age-and-sex logistic-regression baseline with OOF predictions."""
+"""Evaluate age-and-sex classifiers with leakage-safe OOF predictions."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ import pandas as pd
 import sklearn
 from sklearn.base import clone
 from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
@@ -38,9 +39,10 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
-from sklearn.model_selection import StratifiedGroupKFold
+from sklearn.model_selection import GridSearchCV, StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.svm import SVC
 
 
 DEFAULT_INPUT = Path(
@@ -52,6 +54,7 @@ PREDICTORS = ["age_at_mri", "sex"]
 REQUIRED_COLUMNS = ["subject_id", "session_id", *PREDICTORS, "supervised_label"]
 LABEL_TO_INT = {"CN": 0, "AD": 1}
 SEX_CATEGORIES = ["F", "M"]
+CLASSIFIERS = ("logistic", "elasticnet", "svm", "rf", "xgboost")
 LOGGER = logging.getLogger(__name__)
 
 
@@ -89,6 +92,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--n-splits", type=int, default=5)
+    parser.add_argument(
+        "--inner-folds",
+        type=int,
+        default=3,
+        help="Grouped inner folds used to tune non-default classifiers (default: 3).",
+    )
+    parser.add_argument(
+        "--classifier",
+        choices=CLASSIFIERS,
+        default="logistic",
+        help="Classifier to evaluate (default: logistic).",
+    )
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument(
         "--decision-threshold",
@@ -149,7 +164,80 @@ def load_and_validate_cohort(path: Path, n_splits: int) -> pd.DataFrame:
     return data
 
 
-def build_pipeline(random_state: int) -> Pipeline:
+def classifier_and_grid(
+    name: str, random_state: int
+) -> tuple[object, dict[str, list[object]]]:
+    """Return a classifier and the same tuning grid as the morphology pipeline."""
+    if name == "logistic":
+        estimator = LogisticRegression(
+            class_weight="balanced",
+            solver="liblinear",
+            max_iter=1000,
+            random_state=random_state,
+        )
+        grid: dict[str, list[object]] = {}
+    elif name == "elasticnet":
+        estimator = LogisticRegression(
+            l1_ratio=0.5,
+            solver="saga",
+            class_weight="balanced",
+            max_iter=5000,
+            tol=1e-3,
+            random_state=random_state,
+        )
+        grid = {
+            "classifier__C": [0.1, 1.0, 10.0],
+            "classifier__l1_ratio": [0.1, 0.5, 0.9],
+        }
+    elif name == "svm":
+        estimator = SVC(
+            probability=True,
+            class_weight="balanced",
+            random_state=random_state,
+        )
+        grid = {
+            "classifier__C": [0.1, 1.0, 10.0],
+            "classifier__kernel": ["linear", "rbf"],
+        }
+    elif name == "rf":
+        estimator = RandomForestClassifier(
+            n_estimators=200,
+            class_weight="balanced",
+            n_jobs=1,
+            random_state=random_state,
+        )
+        grid = {
+            "classifier__max_depth": [None, 4],
+            "classifier__min_samples_leaf": [1, 3],
+        }
+    elif name == "xgboost":
+        try:
+            from xgboost import XGBClassifier
+        except ImportError as error:
+            raise ValueError(
+                "XGBoost is optional; install xgboost from "
+                "oasis_analysis/requirements.txt before using "
+                "--classifier xgboost."
+            ) from error
+        estimator = XGBClassifier(
+            objective="binary:logistic",
+            eval_metric="logloss",
+            tree_method="hist",
+            n_estimators=150,
+            n_jobs=1,
+            random_state=random_state,
+        )
+        grid = {
+            "classifier__max_depth": [2, 3],
+            "classifier__learning_rate": [0.03, 0.1],
+            "classifier__subsample": [0.8, 1.0],
+        }
+    else:
+        raise ValueError(f"Unknown classifier: {name}")
+    return estimator, grid
+
+
+def build_pipeline(random_state: int, classifier: str = "logistic") -> Pipeline:
     """Create preprocessing and classifier as one leakage-safe estimator."""
     preprocessing = ColumnTransformer(
         transformers=[
@@ -167,15 +255,45 @@ def build_pipeline(random_state: int) -> Pipeline:
         remainder="drop",
         verbose_feature_names_out=False,
     )
-    classifier = LogisticRegression(
-        class_weight="balanced",
-        solver="liblinear",
-        max_iter=1000,
-        random_state=random_state,
-    )
+    estimator, _ = classifier_and_grid(classifier, random_state)
     return Pipeline(
-        steps=[("preprocessing", preprocessing), ("classifier", classifier)]
+        steps=[("preprocessing", preprocessing), ("classifier", estimator)]
     )
+
+
+def checked_inner_splits(
+    x: pd.DataFrame,
+    y: np.ndarray,
+    groups: np.ndarray,
+    n_splits: int,
+    random_state: int,
+    outer_fold: int,
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Build grouped inner splits and validate class coverage and leakage."""
+    if n_splits < 2:
+        raise ValueError("inner_folds must be at least 2.")
+    if n_splits > int(np.bincount(y).min()):
+        raise ValueError(
+            f"Outer fold {outer_fold} has too few examples for "
+            f"inner_folds={n_splits}."
+        )
+    splitter = StratifiedGroupKFold(
+        n_splits=n_splits,
+        shuffle=True,
+        random_state=random_state + outer_fold,
+    )
+    splits = list(splitter.split(x, y, groups))
+    for inner_fold, (train, validation) in enumerate(splits, start=1):
+        if set(groups[train]).intersection(groups[validation]):
+            raise RuntimeError(
+                f"Participant leakage detected in outer fold {outer_fold}, "
+                f"inner fold {inner_fold}."
+            )
+        if len(set(y[train])) != 2 or len(set(y[validation])) != 2:
+            raise ValueError(
+                f"Outer fold {outer_fold}, inner fold {inner_fold} lacks CN or AD."
+            )
+    return splits
 
 
 def calculate_metrics(
@@ -192,7 +310,7 @@ def calculate_metrics(
         "accuracy": float(accuracy_score(y_true, prediction)),
         "balanced_accuracy": float(balanced_accuracy_score(y_true, prediction)),
         "precision": float(precision_score(y_true, prediction, zero_division=0)),
-        "recall_sensitivity": float(recall_score(y_true, prediction, zero_division=0)),
+        "recall": float(recall_score(y_true, prediction, zero_division=0)),
         "specificity": float(specificity),
         "f1": float(f1_score(y_true, prediction, zero_division=0)),
         "brier_score": float(brier_score_loss(y_true, probability)),
@@ -305,7 +423,9 @@ def run_baseline(
     n_splits: int,
     random_state: int,
     decision_threshold: float = 0.5,
-) -> dict[str, float | int]:
+    classifier: str = "logistic",
+    inner_folds: int = 3,
+) -> dict[str, Any]:
     if not np.isfinite(decision_threshold) or not 0.0 <= decision_threshold <= 1.0:
         raise ValueError("decision_threshold must be a finite number between 0 and 1 inclusive.")
     data = load_and_validate_cohort(input_path, n_splits)
@@ -317,13 +437,16 @@ def run_baseline(
     splitter = StratifiedGroupKFold(
         n_splits=n_splits, shuffle=True, random_state=random_state
     )
-    pipeline = build_pipeline(random_state)
+    pipeline = build_pipeline(random_state, classifier)
+    _, parameter_grid = classifier_and_grid(classifier, random_state)
 
     for pattern in (
         "fold_*_train.csv",
         "fold_*_validation.csv",
         "fold_*_pipeline.joblib",
         "fold_*_coefficients.csv",
+        "fold_*_feature_importances.csv",
+        "fold_*_inner_search.csv",
     ):
         for old_split_file in output_dir.glob(pattern):
             old_split_file.unlink()
@@ -339,6 +462,7 @@ def run_baseline(
     fold_rows: list[dict[str, float | int]] = []
     split_audit: list[dict[str, float | int]] = []
     split_manifest: list[dict[str, str | int]] = []
+    fold_search_details: list[dict[str, Any]] = []
 
     for fold, (train_index, validation_index) in enumerate(
         splitter.split(x, y, groups), start=1
@@ -349,27 +473,76 @@ def run_baseline(
         if overlap:
             raise RuntimeError(f"Participant leakage detected in fold {fold}: {sorted(overlap)}")
 
-        fold_pipeline = clone(pipeline)
-        fold_pipeline.fit(x.iloc[train_index], y[train_index])
+        if parameter_grid:
+            inner_splits = checked_inner_splits(
+                x.iloc[train_index],
+                y[train_index],
+                groups[train_index],
+                inner_folds,
+                random_state,
+                fold,
+            )
+            search = GridSearchCV(
+                clone(pipeline),
+                parameter_grid,
+                scoring="roc_auc",
+                cv=inner_splits,
+                n_jobs=1,
+                refit=True,
+                error_score="raise",
+                return_train_score=False,
+            )
+            search.fit(x.iloc[train_index], y[train_index])
+            fold_pipeline = search.best_estimator_
+            search_table = pd.DataFrame(search.cv_results_).loc[
+                :, ["params", "mean_test_score", "std_test_score", "rank_test_score"]
+            ]
+            search_table.to_csv(
+                output_dir / f"fold_{fold:02d}_inner_search.csv", index=False
+            )
+            fold_search_details.append(
+                {
+                    "fold": fold,
+                    "inner_best_auc": float(search.best_score_),
+                    "best_params": search.best_params_,
+                }
+            )
+        else:
+            fold_pipeline = clone(pipeline)
+            fold_pipeline.fit(x.iloc[train_index], y[train_index])
+            fold_search_details.append(
+                {"fold": fold, "inner_best_auc": None, "best_params": {}}
+            )
         fold_probability = fold_pipeline.predict_proba(x.iloc[validation_index])[:, 1]
         age_scaler = fold_pipeline.named_steps["preprocessing"].named_transformers_["age"]
         joblib.dump(fold_pipeline, output_dir / f"fold_{fold:02d}_pipeline.joblib")
         feature_names = fold_pipeline.named_steps["preprocessing"].get_feature_names_out()
-        coefficients = fold_pipeline.named_steps["classifier"].coef_[0]
-        coefficient_table = pd.DataFrame(
-            {
-                "feature": ["intercept", *feature_names],
-                "coefficient": [
-                    fold_pipeline.named_steps["classifier"].intercept_[0],
-                    *coefficients,
-                ],
-            }
-        )
-        coefficient_table.to_csv(
-            output_dir / f"fold_{fold:02d}_coefficients.csv",
-            index=False,
-            float_format="%.10f",
-        )
+        fitted_classifier = fold_pipeline.named_steps["classifier"]
+        if hasattr(fitted_classifier, "coef_"):
+            coefficients = fitted_classifier.coef_[0]
+            intercept = getattr(fitted_classifier, "intercept_", np.array([0.0]))[0]
+            coefficient_table = pd.DataFrame(
+                {
+                    "feature": ["intercept", *feature_names],
+                    "coefficient": [intercept, *coefficients],
+                }
+            )
+            coefficient_table.to_csv(
+                output_dir / f"fold_{fold:02d}_coefficients.csv",
+                index=False,
+                float_format="%.10f",
+            )
+        elif hasattr(fitted_classifier, "feature_importances_"):
+            pd.DataFrame(
+                {
+                    "feature": feature_names,
+                    "importance": fitted_classifier.feature_importances_,
+                }
+            ).to_csv(
+                output_dir / f"fold_{fold:02d}_feature_importances.csv",
+                index=False,
+                float_format="%.10f",
+            )
         probabilities[validation_index] = fold_probability
         fold_ids[validation_index] = fold
 
@@ -443,6 +616,7 @@ def run_baseline(
             "ad_participants": int(np.sum(y == 1)),
             "n_splits": n_splits,
             "random_state": random_state,
+            "classifier": classifier,
         }
     )
 
@@ -514,7 +688,14 @@ def run_baseline(
         "pipeline": {
             "age": "StandardScaler fitted separately in each training fold",
             "sex": "OneHotEncoder(categories=[['F', 'M']], drop='first')",
-            "classifier": "LogisticRegression(class_weight='balanced', solver='liblinear', max_iter=1000)",
+            "classifier": classifier,
+            "parameter_grid": parameter_grid,
+        },
+        "inner_cross_validation": {
+            "method": "StratifiedGroupKFold" if parameter_grid else None,
+            "n_splits": inner_folds if parameter_grid else None,
+            "scoring": "roc_auc" if parameter_grid else None,
+            "fold_search_details": fold_search_details,
         },
         "decision_threshold": decision_threshold,
         "saved_models": "fold_XX_pipeline.joblib; each model is fitted only on that fold's training CSV",
@@ -527,6 +708,10 @@ def run_baseline(
             "joblib": joblib.__version__,
         },
     }
+    if classifier == "xgboost":
+        import xgboost
+
+        config["software"]["xgboost"] = xgboost.__version__
     with (output_dir / "run_config.json").open("w", encoding="utf-8") as stream:
         json.dump(config, stream, indent=2, sort_keys=True)
         stream.write("\n")
@@ -547,6 +732,8 @@ def main() -> None:
             n_splits=args.n_splits,
             random_state=args.random_state,
             decision_threshold=args.decision_threshold,
+            classifier=args.classifier,
+            inner_folds=args.inner_folds,
         )
     except (OSError, ValueError, RuntimeError, pd.errors.ParserError) as error:
         LOGGER.exception("Demographic baseline failed: %s", error)
@@ -556,6 +743,7 @@ def main() -> None:
         f"Participants: {metrics['participants']} "
         f"(CN={metrics['cn_participants']}, AD={metrics['ad_participants']})"
     )
+    report(f"Classifier: {args.classifier}")
     report(f"OOF ROC-AUC: {metrics['roc_auc']:.4f}")
     report(f"OOF balanced accuracy: {metrics['balanced_accuracy']:.4f}")
     report(f"Results: {relative_path(args.output_dir)}")
