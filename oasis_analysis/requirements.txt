@@ -1,6 +1,7 @@
 pandas==3.0.6
 numpy==2.4.6
 scikit-learn==1.8.0
+scipy==1.18.1
 matplotlib==3.10.7
 joblib==1.5.2
 xgboost==3.2.0

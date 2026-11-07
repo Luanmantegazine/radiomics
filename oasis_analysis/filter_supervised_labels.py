@@ -14,6 +14,9 @@ import pandas as pd
 LABEL_COLUMN = "supervised_label"
 SUBJECT_COLUMN = "subject_id"
 GAP_COLUMN = "clinical_mri_gap_days"
+ELIGIBILITY_COLUMN = "training_eligible"
+TRUE_VALUES = {"true", "1", "yes"}
+FALSE_VALUES = {"false", "0", "no"}
 LABELS_TO_KEEP = {"CN", "AD"}
 SIMPLIFIED_COLUMNS = [
     SUBJECT_COLUMN,
@@ -70,6 +73,17 @@ def report(message: str) -> None:
     LOGGER.info(message)
 
 
+def parse_eligibility(values: pd.Series) -> pd.Series:
+    """Parse the label layer's training_eligible flag; reject unknown values."""
+    normalized = values.astype(str).str.strip().str.lower()
+    unknown = sorted(set(normalized) - TRUE_VALUES - FALSE_VALUES)
+    if unknown:
+        raise ValueError(
+            f"{ELIGIBILITY_COLUMN!r} has unrecognized value(s): {', '.join(unknown)}."
+        )
+    return normalized.isin(TRUE_VALUES)
+
+
 def filter_csv(
     input_path: Path,
     output_path: Path,
@@ -93,13 +107,21 @@ def filter_csv(
         missing = ", ".join(sorted(missing_columns))
         raise ValueError(f"Required column(s) not found: {missing}.")
 
-    eligible_data = data[data[LABEL_COLUMN].isin(LABELS_TO_KEEP)].copy()
+    labelled_data = data[data[LABEL_COLUMN].isin(LABELS_TO_KEEP)].copy()
 
-    labels_per_subject = eligible_data.groupby(SUBJECT_COLUMN)[LABEL_COLUMN].nunique()
+    # Conflicting CN/AD labels exclude a subject even when one of the
+    # conflicting sessions is not training-eligible.
+    labels_per_subject = labelled_data.groupby(SUBJECT_COLUMN)[LABEL_COLUMN].nunique()
     mixed_subjects = labels_per_subject[labels_per_subject > 1].index
-    mixed_mask = eligible_data[SUBJECT_COLUMN].isin(mixed_subjects)
+    mixed_mask = labelled_data[SUBJECT_COLUMN].isin(mixed_subjects)
     mixed_rows = int(mixed_mask.sum())
-    consistent_data = eligible_data[~mixed_mask].copy()
+    consistent_data = labelled_data[~mixed_mask].copy()
+
+    ineligible_rows = 0
+    if ELIGIBILITY_COLUMN in consistent_data.columns:
+        eligible_mask = parse_eligibility(consistent_data[ELIGIBILITY_COLUMN])
+        ineligible_rows = int((~eligible_mask).sum())
+        consistent_data = consistent_data[eligible_mask].copy()
 
     numeric_gap = pd.to_numeric(consistent_data[GAP_COLUMN], errors="coerce")
     if numeric_gap.isna().any():
@@ -133,6 +155,7 @@ def filter_csv(
         "ad_kept": ad_kept,
         "cn_kept": cn_kept,
         "discarded": discarded,
+        "ineligible_rows": ineligible_rows,
         "mixed_subjects": len(mixed_subjects),
         "mixed_rows": mixed_rows,
         "extra_sessions": extra_sessions,
@@ -178,6 +201,7 @@ def main() -> None:
 
     total_kept = stats["ad_kept"] + stats["cn_kept"]
     report(f"Initial rows: {stats['initial_rows']}")
+    report(f"CN/AD rows removed as not training-eligible: {stats['ineligible_rows']}")
     report(f"Subjects removed for mixed AD/CN diagnoses: {stats['mixed_subjects']}")
     report(f"Rows removed for mixed AD/CN diagnoses: {stats['mixed_rows']}")
     report(f"Additional sessions discarded: {stats['extra_sessions']}")

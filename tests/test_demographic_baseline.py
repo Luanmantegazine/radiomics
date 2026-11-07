@@ -7,13 +7,18 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+from joblib import load
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 
+from oasis_analysis import morphological_model
 from oasis_analysis.demographic_baseline import (
     CLASSIFIERS,
+    DEFAULT_INPUT,
+    DEFAULT_OUTPUT_DIR,
+    ELASTICNET_C_GRID,
     classifier_and_grid,
     run_baseline,
 )
@@ -62,8 +67,8 @@ class DemographicBaselineTests(unittest.TestCase):
         self.assertEqual(
             elasticnet_grid,
             {
-                "classifier__C": [0.1, 1.0, 10.0],
-                "classifier__l1_ratio": [0.1, 0.5, 0.9],
+                "classifier__C": [0.003, 0.01, 0.03, 0.1, 1.0],
+                "classifier__l1_ratio": [0.5],
             },
         )
         self.assertEqual(
@@ -123,6 +128,42 @@ class DemographicBaselineTests(unittest.TestCase):
         saved_metrics = json.loads((self.output_dir / "metrics.json").read_text())
         self.assertIn("recall", saved_metrics)
         self.assertNotIn("recall_sensitivity", saved_metrics)
+
+    def test_elasticnet_grid_is_shared_with_morphological_pipeline(self) -> None:
+        self.assertEqual(ELASTICNET_C_GRID, morphological_model.ELASTICNET_C_GRID)
+        self.assertEqual(
+            classifier_and_grid("elasticnet", 42)[1],
+            morphological_model.classifier_and_grid("elasticnet", 42)[1],
+        )
+
+    def test_default_paths_are_anchored_to_analysis_folder(self) -> None:
+        analysis_dir = Path(__file__).resolve().parent.parent / "oasis_analysis"
+        self.assertTrue(DEFAULT_INPUT.is_absolute())
+        self.assertEqual(DEFAULT_OUTPUT_DIR, analysis_dir / "output/demographic_baseline")
+
+    def test_xgboost_is_weighted_by_training_class_balance(self) -> None:
+        data = cohort()
+        data = pd.concat([data, data.iloc[:6].assign(
+            subject_id=lambda frame: frame["subject_id"] + "b",
+            session_id=lambda frame: frame["session_id"] + "b")], ignore_index=True)
+        data.to_csv(self.input_path, index=False)
+        estimator, _ = classifier_and_grid("xgboost", 42)
+        with patch(
+            "oasis_analysis.demographic_baseline.classifier_and_grid",
+            return_value=(estimator, {"classifier__max_depth": [2]}),
+        ):
+            run_baseline(self.input_path, self.output_dir, n_splits=3, inner_folds=2,
+                         random_state=42, classifier="xgboost")
+
+        assignments = pd.read_csv(self.output_dir / "fold_assignments.csv")
+        for fold in range(1, 4):
+            pipeline = load(self.output_dir / f"fold_{fold:02d}_pipeline.joblib")
+            train = assignments[assignments["validation_fold"] != fold]
+            counts = train["supervised_label"].value_counts()
+            self.assertAlmostEqual(
+                pipeline.named_steps["classifier"].get_params()["scale_pos_weight"],
+                counts["CN"] / counts["AD"],
+            )
 
 
 if __name__ == "__main__":

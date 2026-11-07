@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 import sklearn
 from joblib import dump
-from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -67,16 +67,101 @@ from oasis_analysis.prepare_morphological_features import (
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent / "output/morphological_model"
 CLASSIFIERS = ("elasticnet", "svm", "rf", "xgboost")
 LABEL_TO_INT = {"CN": 0, "AD": 1}
+# The 5x3 nested search on the CN/AD cohort chose the smallest C (0.1) in
+# every outer fold, with flat l1_ratio; the grid extends below it.
+ELASTICNET_C_GRID = (0.003, 0.01, 0.03, 0.1, 1.0)
+AGE_COLUMN = "age_at_mri"
+SEX_COLUMN = "sex"
+SEX_CATEGORIES = ("F", "M")
+STALE_OUTPUT_PATTERNS = (
+    "fold_*_model.joblib",
+    "fold_*_inner_search.csv",
+    "fold_*_validation.csv",
+)
+
+
+def male_indicator(X: pd.DataFrame) -> np.ndarray:
+    """Return 1.0 for male and 0.0 for female participants."""
+    return (X.loc[:, SEX_COLUMN].astype(str) == "M").to_numpy(dtype=float)
+
+
+def fit_cn_regression(
+    design: np.ndarray, targets: np.ndarray, covariates: list[str]
+) -> list[dict[str, object]]:
+    """Fit target = intercept + covariates using control rows only."""
+    rows = design.shape[0]
+    full_design = np.column_stack([np.ones(rows), design])
+    if rows < full_design.shape[1] + 1:
+        raise ValueError(
+            f"CN-normative adjustment needs more than {full_design.shape[1]} "
+            "CN training rows."
+        )
+    if np.linalg.matrix_rank(full_design) < full_design.shape[1]:
+        raise ValueError(
+            "CN training covariates are collinear or constant; check that both "
+            "sexes and varied ages and eTIV are present among CN rows."
+        )
+    coefficients, *_ = np.linalg.lstsq(full_design, targets, rcond=None)
+    return [
+        {
+            "intercept": float(coefficients[0, column]),
+            "coefficients": {
+                name: float(coefficients[index + 1, column])
+                for index, name in enumerate(covariates)
+            },
+            "cn_training_rows": int(rows),
+        }
+        for column in range(targets.shape[1])
+    ]
 
 
 class ETIVAdjustedFeatures(TransformerMixin, BaseEstimator):
-    """Adjust volumes using CN rows passed to fit; copy thickness unchanged."""
+    """Adjust measurements using only the CN rows passed to fit.
+
+    By default volumes are residualized on eTIV (or divided by it) and cortical
+    thickness is copied unchanged. With ``adjust_age_sex`` volumes are
+    residualized on eTIV, age and sex and thickness on age and sex (a
+    CN-normative, W-score style adjustment). ``include_demographics`` appends
+    age and a male indicator as features.
+    """
 
     def __init__(self, *, extended_data: bool = False, asymmetry: bool = False,
-                 proportional: bool = False):
+                 proportional: bool = False, adjust_age_sex: bool = False,
+                 include_demographics: bool = False):
         self.extended_data = extended_data
         self.asymmetry = asymmetry
         self.proportional = proportional
+        self.adjust_age_sex = adjust_age_sex
+        self.include_demographics = include_demographics
+
+    def _volume_name(self, target: str) -> str:
+        name = adjusted_name(target, self.proportional)
+        if not self.adjust_age_sex:
+            return name
+        if self.proportional:
+            return f"{name}_age_sex_residual"
+        return name.replace("_residual_mm3", "_age_sex_etiv_residual_mm3")
+
+    def _volume_values(self, X: pd.DataFrame, target: str) -> np.ndarray:
+        volume = X.loc[:, self.mapping_[target]].to_numpy(dtype=float)
+        if self.proportional:
+            return volume / X.loc[:, self.mapping_["etiv_mm3"]].to_numpy(dtype=float)
+        return volume
+
+    def _covariates(self, X: pd.DataFrame, names: list[str]) -> np.ndarray:
+        columns = {
+            "etiv_mm3": lambda: X.loc[:, self.mapping_["etiv_mm3"]].to_numpy(dtype=float),
+            AGE_COLUMN: lambda: X.loc[:, AGE_COLUMN].to_numpy(dtype=float),
+            "male": lambda: male_indicator(X),
+        }
+        return np.column_stack([columns[name]() for name in names])
+
+    @staticmethod
+    def _predict(fit: dict[str, object], covariates: np.ndarray,
+                 names: list[str]) -> np.ndarray:
+        coefficients = fit["coefficients"]
+        return fit["intercept"] + covariates @ np.asarray(
+            [coefficients[name] for name in names], dtype=float)
 
     def fit(self, X: pd.DataFrame, y: np.ndarray | None = None) -> ETIVAdjustedFeatures:
         mapping = EXTENDED_SOURCE_COLUMNS if self.extended_data else DEFAULT_SOURCE_COLUMNS
@@ -92,12 +177,42 @@ class ETIVAdjustedFeatures(TransformerMixin, BaseEstimator):
             target for target in mapping if target.endswith("_thickness_mm")
         ]
         self.asymmetry_pairs_ = pairs
+        self.volume_covariates_ = (
+            ([] if self.proportional else ["etiv_mm3"]) + [AGE_COLUMN, "male"]
+            if self.adjust_age_sex else []
+        )
+        self.thickness_covariates_ = [AGE_COLUMN, "male"] if self.adjust_age_sex else []
+        thickness_names = [
+            f"{target}_age_sex_residual" if self.adjust_age_sex else target
+            for target in self.thickness_targets_
+        ]
+        demographic_names = [AGE_COLUMN, "male"] if self.include_demographics else []
         self.feature_names_ = [
-            *(adjusted_name(target, self.proportional) for target in self.volume_targets_),
-            *self.thickness_targets_, *pairs,
+            *(self._volume_name(target) for target in self.volume_targets_),
+            *thickness_names, *pairs, *demographic_names,
         ]
         self.cn_fits_ = {}
-        if not self.proportional:
+        if self.adjust_age_sex:
+            if y is None:
+                raise ValueError("Age/sex adjustment requires training labels.")
+            controls = np.asarray(y) == LABEL_TO_INT["CN"]
+            control_rows = X.loc[controls]
+            groups = (
+                (self.volume_targets_, self.volume_covariates_,
+                 lambda target: self._volume_values(control_rows, target)),
+                (self.thickness_targets_, self.thickness_covariates_,
+                 lambda target: control_rows.loc[:, mapping[target]].to_numpy(dtype=float)),
+            )
+            for targets, covariates, values in groups:
+                if not targets:
+                    continue
+                fits = fit_cn_regression(
+                    self._covariates(control_rows, covariates),
+                    np.column_stack([values(target) for target in targets]),
+                    covariates,
+                )
+                self.cn_fits_.update(dict(zip(targets, fits)))
+        elif not self.proportional:
             if y is None:
                 raise ValueError("Residual adjustment requires training labels.")
             labels = np.asarray(y)
@@ -121,6 +236,8 @@ class ETIVAdjustedFeatures(TransformerMixin, BaseEstimator):
         return self
 
     def transform(self, X: pd.DataFrame) -> np.ndarray:
+        if self.adjust_age_sex:
+            return self._transform_age_sex(X)
         etiv = X.loc[:, self.mapping_["etiv_mm3"]].to_numpy(dtype=float)
         features = []
         for target in self.volume_targets_:
@@ -137,6 +254,36 @@ class ETIVAdjustedFeatures(TransformerMixin, BaseEstimator):
             left = X.loc[:, self.mapping_[left_target]].to_numpy(dtype=float)
             right = X.loc[:, self.mapping_[right_target]].to_numpy(dtype=float)
             features.append((left - right) / (left + right))
+        features.extend(self._demographic_features(X))
+        return np.column_stack(features)
+
+    def _demographic_features(self, X: pd.DataFrame) -> list[np.ndarray]:
+        if not self.include_demographics:
+            return []
+        return [X.loc[:, AGE_COLUMN].to_numpy(dtype=float), male_indicator(X)]
+
+    def _transform_age_sex(self, X: pd.DataFrame) -> np.ndarray:
+        features = []
+        volume_covariates = self._covariates(X, self.volume_covariates_)
+        for target in self.volume_targets_:
+            features.append(
+                self._volume_values(X, target)
+                - self._predict(self.cn_fits_[target], volume_covariates,
+                                self.volume_covariates_)
+            )
+        if self.thickness_targets_:
+            thickness_covariates = self._covariates(X, self.thickness_covariates_)
+            for target in self.thickness_targets_:
+                features.append(
+                    X.loc[:, self.mapping_[target]].to_numpy(dtype=float)
+                    - self._predict(self.cn_fits_[target], thickness_covariates,
+                                    self.thickness_covariates_)
+                )
+        for left_target, right_target in self.asymmetry_pairs_.values():
+            left = X.loc[:, self.mapping_[left_target]].to_numpy(dtype=float)
+            right = X.loc[:, self.mapping_[right_target]].to_numpy(dtype=float)
+            features.append((left - right) / (left + right))
+        features.extend(self._demographic_features(X))
         return np.column_stack(features)
 
     def get_feature_names_out(self, input_features: object = None) -> np.ndarray:
@@ -146,7 +293,8 @@ class ETIVAdjustedFeatures(TransformerMixin, BaseEstimator):
 ETIVAdjustedFeatures.__module__ = "oasis_analysis.morphological_model"
 
 
-def load_cohort(path: Path, *, extended_data: bool, outer_folds: int) -> pd.DataFrame:
+def load_cohort(path: Path, *, extended_data: bool, outer_folds: int,
+                demographics: bool = False) -> pd.DataFrame:
     with path.open(newline="", encoding="utf-8-sig") as stream:
         header = next(csv.reader(stream), None)
     if header is None:
@@ -156,6 +304,8 @@ def load_cohort(path: Path, *, extended_data: bool, outer_folds: int) -> pd.Data
         raise ValueError(f"Duplicate input columns: {', '.join(duplicates)}")
     mapping = EXTENDED_SOURCE_COLUMNS if extended_data else DEFAULT_SOURCE_COLUMNS
     needed = ["subject_id", "session_id", "supervised_label", *mapping.values()]
+    if demographics:
+        needed += [AGE_COLUMN, SEX_COLUMN]
     missing = sorted(set(needed) - set(header))
     if missing:
         raise ValueError(f"Required input columns are absent: {', '.join(missing)}")
@@ -171,6 +321,14 @@ def load_cohort(path: Path, *, extended_data: bool, outer_folds: int) -> pd.Data
         if not np.isfinite(numeric).all() or (numeric <= 0).any():
             raise ValueError(f"{source} must contain finite positive measurements.")
         data[source] = numeric.astype(float)
+    if demographics:
+        age = pd.to_numeric(data[AGE_COLUMN], errors="raise")
+        if not np.isfinite(age).all():
+            raise ValueError(f"{AGE_COLUMN} must contain finite values.")
+        data[AGE_COLUMN] = age.astype(float)
+        sexes = set(data[SEX_COLUMN].astype(str))
+        if not sexes.issubset(SEX_CATEGORIES):
+            raise ValueError(f"Expected sex values F or M; found {sorted(sexes)}.")
     counts = data["supervised_label"].value_counts()
     if outer_folds < 2 or int(counts.min()) < outer_folds:
         raise ValueError("Each class needs at least one participant per outer fold.")
@@ -183,8 +341,8 @@ def classifier_and_grid(name: str, random_state: int):
             l1_ratio=0.5, solver="saga", class_weight="balanced",
             max_iter=5000, tol=1e-3, random_state=random_state,
         )
-        grid = {"classifier__C": [0.1, 1.0, 10.0],
-                "classifier__l1_ratio": [0.1, 0.5, 0.9]}
+        grid = {"classifier__C": list(ELASTICNET_C_GRID),
+                "classifier__l1_ratio": [0.5]}
     elif name == "svm":
         estimator = SVC(probability=True, class_weight="balanced", random_state=random_state)
         grid = {"classifier__C": [0.1, 1.0, 10.0],
@@ -354,27 +512,42 @@ def save_confusion_matrix(
     plt.close(fig)
 
 
+def volume_adjustment_label(proportional: bool, adjust_age_sex: bool) -> str:
+    if proportional and adjust_age_sex:
+        return "proportional_then_residual_on_age_sex_cn_training_only"
+    if adjust_age_sex:
+        return "residual_on_etiv_age_sex_cn_training_only"
+    return "proportional" if proportional else "residual_cn_training_only"
+
+
 def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticnet",
               extended_data: bool = False, asymmetry: bool = False,
               proportional: bool = False, outer_folds: int = 5,
               inner_folds: int = 3, random_state: int = 42,
               threshold: float = 0.5, bootstrap_resamples: int = 2000,
-              fold_assignments: Path | None = None) -> dict[str, float | int]:
+              fold_assignments: Path | None = None, adjust_age_sex: bool = False,
+              include_demographics: bool = False) -> dict[str, float | int]:
     if not math.isfinite(threshold) or not 0 <= threshold <= 1:
         raise ValueError("threshold must be between 0 and 1.")
     if inner_folds < 2:
         raise ValueError("inner-folds must be at least 2.")
     if bootstrap_resamples < 100:
         raise ValueError("bootstrap-resamples must be at least 100.")
-    data = load_cohort(input_path, extended_data=extended_data, outer_folds=outer_folds)
+    demographics = adjust_age_sex or include_demographics
+    data = load_cohort(input_path, extended_data=extended_data, outer_folds=outer_folds,
+                       demographics=demographics)
     mapping = EXTENDED_SOURCE_COLUMNS if extended_data else DEFAULT_SOURCE_COLUMNS
-    X = data.loc[:, list(mapping.values())]
+    feature_columns = list(mapping.values())
+    if demographics:
+        feature_columns += [AGE_COLUMN, SEX_COLUMN]
+    X = data.loc[:, feature_columns]
     y = data["supervised_label"].map(LABEL_TO_INT).to_numpy(dtype=int)
     groups = data["subject_id"].to_numpy()
     estimator, grid = classifier_and_grid(classifier, random_state)
     pipeline = Pipeline([
         ("morphology", ETIVAdjustedFeatures(
-            extended_data=extended_data, asymmetry=asymmetry, proportional=proportional)),
+            extended_data=extended_data, asymmetry=asymmetry, proportional=proportional,
+            adjust_age_sex=adjust_age_sex, include_demographics=include_demographics)),
         ("zscore", StandardScaler()),
         ("classifier", estimator),
     ])
@@ -395,6 +568,9 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
             outer_splits.append((train_array, validation_array))
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    for pattern in STALE_OUTPUT_PATTERNS:
+        for stale in output_dir.glob(pattern):
+            stale.unlink()
     probability = np.full(len(data), np.nan)
     fold_number = np.full(len(data), -1, dtype=int)
     fold_metrics = []
@@ -408,8 +584,13 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
             n_splits=inner_folds, shuffle=True, random_state=random_state + fold)
         inner_splits = checked_splits(
             inner_splitter, X.iloc[train], y[train], groups[train], name=f"inner/outer-{fold}")
+        fold_pipeline = clone(pipeline)
+        if classifier == "xgboost":
+            # Match class_weight="balanced" used by the other classifiers.
+            negatives, positives = np.bincount(y[train], minlength=2)
+            fold_pipeline.set_params(classifier__scale_pos_weight=negatives / positives)
         search = GridSearchCV(
-            pipeline, grid, scoring="roc_auc", cv=inner_splits,
+            fold_pipeline, grid, scoring="roc_auc", cv=inner_splits,
             n_jobs=1, refit=True, error_score="raise", return_train_score=False,
         )
         search.fit(X.iloc[train], y[train])
@@ -440,6 +621,9 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
             "fold": fold,
             "inner_best_auc": float(search.best_score_),
             "best_params": search.best_params_,
+            "scale_pos_weight": (
+                float(fitted.named_steps["classifier"].get_params()["scale_pos_weight"])
+                if classifier == "xgboost" else None),
             "cn_etiv_fits": transformer.cn_fits_,
             "feature_names": transformer.feature_names_,
             "zscore_mean": scaler.mean_.tolist(),
@@ -460,6 +644,9 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
                     "ad_participants": int((y == 1).sum())})
     calibration, ece = calibration_table(y, probability)
     metrics["expected_calibration_error"] = ece
+    fold_aucs = [row["roc_auc"] for row in fold_metrics]
+    metrics["fold_roc_auc_mean"] = float(np.mean(fold_aucs))
+    metrics["fold_roc_auc_sd"] = float(np.std(fold_aucs, ddof=1))
     oof = data.loc[:, ["subject_id", "session_id", "supervised_label"]].copy()
     oof["fold"] = fold_number
     oof["probability_ad"] = probability
@@ -479,7 +666,10 @@ def run_model(input_path: Path, output_dir: Path, *, classifier: str = "elasticn
     configuration = {
         "input": str(input_path.resolve()), "classifier": classifier,
         "extended_data": extended_data, "asymmetry": asymmetry,
-        "volume_adjustment": "proportional" if proportional else "residual_cn_training_only",
+        "volume_adjustment": volume_adjustment_label(proportional, adjust_age_sex),
+        "thickness_adjustment": (
+            "residual_on_age_sex_cn_training_only" if adjust_age_sex else "none"),
+        "demographic_features": [AGE_COLUMN, "male"] if include_demographics else [],
         "outer_cv": "StratifiedGroupKFold" if fold_assignments is None else "provided_assignments",
         "fold_assignments": str(fold_assignments.resolve()) if fold_assignments else None,
         "inner_cv": "StratifiedGroupKFold", "group": "subject_id",
@@ -510,6 +700,13 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=0.5)
     parser.add_argument("--bootstrap-resamples", type=int, default=2000)
     parser.add_argument("--fold-assignments", type=Path)
+    parser.add_argument(
+        "--adjust-age-sex", action="store_true",
+        help="CN-normative (W-score) adjustment: regress volumes on eTIV, age and sex "
+             "and thickness on age and sex, fitted on CN training rows only.")
+    parser.add_argument(
+        "--include-demographics", action="store_true",
+        help="Add age_at_mri and sex (male indicator) as model features.")
     args = parser.parse_args()
     try:
         metrics = run_model(
@@ -519,6 +716,8 @@ def main() -> int:
             inner_folds=args.inner_folds, random_state=args.random_state,
             threshold=args.threshold, bootstrap_resamples=args.bootstrap_resamples,
             fold_assignments=args.fold_assignments,
+            adjust_age_sex=args.adjust_age_sex,
+            include_demographics=args.include_demographics,
         )
     except (OSError, ValueError, RuntimeError, csv.Error) as error:
         parser.exit(2, f"Error: {error}\n")
