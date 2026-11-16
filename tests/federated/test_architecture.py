@@ -54,3 +54,17 @@ def test_persistence_stays_out_of_clients_and_coordinator():
         assert not [
             (p, t) for p, t in _imports(package) if t in {"sqlalchemy", "mlflow", "fastapi"}
         ]
+
+
+def test_imaging_stack_is_confined_to_the_client():
+    """Images are read only inside a site; no other component can open them."""
+    imaging = {"radiomics", "SimpleITK", "nibabel", "pandas"}
+    for package in ("shared", "coordinator", "backend", "evaluation"):
+        assert not [(p, t) for p, t in _imports(package) if t in imaging]
+
+
+def test_imaging_pipeline_has_no_network_or_transport_dependency():
+    transport = {"coordinator", "backend", "httpx", "requests", "urllib", "socket", "flwr"}
+    assert not [
+        (p, t) for p, t in _imports("client") if "imaging" in p and t in transport
+    ]

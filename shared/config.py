@@ -45,8 +45,19 @@ class SyntheticDataSourceSpec(ConfigModel):
     feature_names: tuple[FeatureName, ...] = Field(min_length=1)
 
 
-# Future stages add real sources (e.g. a NIfTI directory) to this union.
-DataSourceSpec = Annotated[SyntheticDataSourceSpec, Field(discriminator="kind")]
+class FeatureTableSourceSpec(ConfigModel):
+    """Feature table produced by the site's local radiomic pipeline (Stage 2)."""
+
+    kind: Literal["feature_table"] = "feature_table"
+    features_path: str
+    manifest_path: str
+    data_origin: DataOrigin
+    """Declared provenance of the underlying images (phantoms are 'synthetic')."""
+
+
+DataSourceSpec = Annotated[
+    SyntheticDataSourceSpec | FeatureTableSourceSpec, Field(discriminator="kind")
+]
 
 
 class SimulatedClientSpec(ConfigModel):
@@ -87,8 +98,12 @@ class ExperimentConfig(ConfigModel):
             simulated = [c.client_id for c in self.simulation.clients]
             if len(set(simulated)) != len(simulated):
                 raise ValueError("simulated client ids must be unique")
-            if self.data_origin is not DataOrigin.SYNTHETIC:
-                raise ValueError("a simulated experiment must declare data_origin: synthetic")
+            origins = {
+                getattr(c.data_source, "data_origin", DataOrigin.SYNTHETIC)
+                for c in self.simulation.clients
+            }
+            if origins != {self.data_origin}:
+                raise ValueError("every simulated data source must match data_origin")
         return self
 
 

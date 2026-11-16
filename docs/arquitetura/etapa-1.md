@@ -235,7 +235,7 @@ Declaradas em `pyproject.toml` (grupos opcionais) e congeladas em `uv.lock`.
 ## 8. Como executar
 
 ```bash
-uv sync --extra backend --extra dev
+uv sync --extra backend --extra dev --extra imaging
 ```
 
 ```bash
