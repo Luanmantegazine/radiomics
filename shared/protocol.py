@@ -1,0 +1,272 @@
+"""Wire contracts between federated clients and the coordinator.
+
+These Pydantic models are the *only* things allowed to cross the
+client/coordinator boundary. The design is allowlist-based:
+
+* every model forbids unknown fields (``extra="forbid"``), so a field such as
+  ``participant_ids`` or ``time_months`` cannot be smuggled into a message;
+* there is no free-text field: refusal reasons are enum codes and every string
+  is pattern-constrained;
+* payload arrays are indexed by *feature*, never by participant. Each payload
+  validates that its array lengths equal ``len(feature_names)``.
+
+Limitations (documented, not solved, in Stage 1):
+
+* The coordinator sees per-client aggregates (honest-but-curious model). Secure
+  aggregation and differential privacy are not implemented.
+* Shape checks cannot prove that an array of length ``n_features`` does not
+  encode individual values; this is mitigated by the minimum cohort size rule
+  (:mod:`shared.privacy`) and by code review of the client tasks, which are the
+  only producers of payloads.
+"""
+
+from __future__ import annotations
+
+import math
+from enum import StrEnum
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+#: Version of the client/coordinator protocol. Bump on any contract change.
+PROTOCOL_VERSION = "1.0"
+
+#: Upper bound on a single serialized message (coarse exfiltration/volume guard).
+MAX_MESSAGE_BYTES = 1_048_576
+
+ClientId = Annotated[str, StringConstraints(pattern=r"^client-[a-z0-9]{2,32}$")]
+FeatureName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.\-]{1,128}$")]
+Token = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_.+\-]{1,64}$")]
+Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_\-]{1,96}$")]
+JsonScalar = bool | int | float | str | None
+
+
+class WireModel(BaseModel):
+    """Base class of every message: immutable and closed to unknown fields."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class FederatedPhase(StrEnum):
+    """Kind of federated activity a round belongs to.
+
+    The three scientific phases are kept separate because they need different
+    aggregation strategies. ``INFRASTRUCTURE`` is the only phase with tasks
+    implemented in Stage 1.
+    """
+
+    INFRASTRUCTURE = "infrastructure"
+    FEATURE_SELECTION = "feature_selection"
+    TRAINING = "training"
+    EVALUATION = "evaluation"
+
+
+class TaskKind(StrEnum):
+    """Local computations a client can be asked to run."""
+
+    FEATURE_INVENTORY = "feature_inventory"
+    FEATURE_SUMMARY = "feature_summary"
+
+
+class DataOrigin(StrEnum):
+    """Provenance of the data behind a result. Synthetic results are never science."""
+
+    SYNTHETIC = "synthetic"
+    REAL = "real"
+
+
+class UpdateStatus(StrEnum):
+    COMPLETED = "completed"
+    REFUSED = "refused"
+    FAILED = "failed"
+
+
+class ReasonCode(StrEnum):
+    """Closed vocabulary for refusals/failures (free text would be a leak channel)."""
+
+    COHORT_TOO_SMALL = "cohort_too_small"
+    UNSUPPORTED_TASK = "unsupported_task"
+    MISSING_FEATURES = "missing_features"
+    PROTOCOL_MISMATCH = "protocol_mismatch"
+    EXPERIMENT_MISMATCH = "experiment_mismatch"
+    NOT_REGISTERED = "not_registered"
+    DISCLOSURE_BLOCKED = "disclosure_blocked"
+    UNKNOWN_CLIENT = "unknown_client"
+    DUPLICATE_CLIENT = "duplicate_client"
+    DATA_ORIGIN_MISMATCH = "data_origin_mismatch"
+    INTERNAL_ERROR = "internal_error"
+
+
+class PrivacyPolicy(WireModel):
+    """Disclosure-control thresholds, distributed with every round."""
+
+    min_cohort_size: int = Field(default=10, ge=2)
+    """A client never reports statistics computed on fewer participants."""
+    min_clients_per_aggregate: int = Field(default=2, ge=2)
+    """The coordinator never releases an aggregate built from fewer clients."""
+
+
+# --------------------------------------------------------------------------- #
+# Registration
+# --------------------------------------------------------------------------- #
+class ClientRegistration(WireModel):
+    """Client -> coordinator. Announces a pseudonymised participant site."""
+
+    message_type: Literal["client_registration"] = "client_registration"
+    protocol_version: Token
+    experiment_id: Identifier
+    client_id: ClientId
+    supported_tasks: tuple[TaskKind, ...]
+    data_origin: DataOrigin
+    software: dict[Token, Token] = Field(default_factory=dict)
+    """Library name -> version, for provenance."""
+
+
+class RegistrationAck(WireModel):
+    """Coordinator -> client."""
+
+    message_type: Literal["registration_ack"] = "registration_ack"
+    protocol_version: Token
+    experiment_id: Identifier
+    client_id: ClientId
+    accepted: bool
+    reason_code: ReasonCode | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Round configuration
+# --------------------------------------------------------------------------- #
+class RoundConfig(WireModel):
+    """Coordinator -> client. Everything a client needs to run one round."""
+
+    message_type: Literal["round_config"] = "round_config"
+    protocol_version: Token
+    experiment_id: Identifier
+    round_id: Identifier
+    round_number: int = Field(ge=1)
+    phase: FederatedPhase
+    task: TaskKind
+    seed: int = Field(ge=0)
+    config_hash: Token
+    """Hash of the versioned experiment configuration this round derives from."""
+    privacy: PrivacyPolicy
+    feature_names: tuple[FeatureName, ...] | None = None
+    """Agreed feature schema, when the task needs one."""
+    params: dict[Token, JsonScalar] = Field(default_factory=dict)
+
+
+# --------------------------------------------------------------------------- #
+# Authorized payloads (client -> coordinator)
+# --------------------------------------------------------------------------- #
+class FeatureInventoryPayload(WireModel):
+    """Names of the features available at a site. Contains no values."""
+
+    kind: Literal["feature_inventory"] = "feature_inventory"
+    feature_names: tuple[FeatureName, ...]
+
+
+class FeatureSummaryPayload(WireModel):
+    """Per-feature sufficient statistics (count, mean, unbiased variance).
+
+    Infrastructure payload of Stage 1: it exercises a real, verifiable
+    aggregation (pooled moments) without carrying any scientific claim.
+    """
+
+    kind: Literal["feature_summary"] = "feature_summary"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    n_samples: int = Field(ge=2)
+    mean: tuple[float, ...]
+    variance: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _feature_indexed_and_finite(self) -> FeatureSummaryPayload:
+        n = len(self.feature_names)
+        if len(self.mean) != n or len(self.variance) != n:
+            raise ValueError("mean/variance must have exactly one entry per feature")
+        if len(set(self.feature_names)) != n:
+            raise ValueError("feature_names must be unique")
+        if not all(math.isfinite(v) for v in (*self.mean, *self.variance)):
+            raise ValueError("statistics must be finite")
+        if any(v < 0 for v in self.variance):
+            raise ValueError("variance cannot be negative")
+        return self
+
+
+AuthorizedPayload = Annotated[
+    FeatureInventoryPayload | FeatureSummaryPayload, Field(discriminator="kind")
+]
+
+
+class CostReport(WireModel):
+    """Client-side computational cost of one round (no data-derived content)."""
+
+    durations_s: dict[Token, float] = Field(default_factory=dict)
+    peak_memory_bytes: int | None = Field(default=None, ge=0)
+
+
+class ClientUpdate(WireModel):
+    """Client -> coordinator. Result of one round."""
+
+    message_type: Literal["client_update"] = "client_update"
+    protocol_version: Token
+    experiment_id: Identifier
+    round_id: Identifier
+    client_id: ClientId
+    task: TaskKind
+    status: UpdateStatus
+    reason_code: ReasonCode | None = None
+    payload: AuthorizedPayload | None = None
+    costs: CostReport = Field(default_factory=CostReport)
+
+    @model_validator(mode="after")
+    def _status_consistency(self) -> ClientUpdate:
+        if self.status is UpdateStatus.COMPLETED:
+            if self.payload is None:
+                raise ValueError("a completed update must carry a payload")
+            if self.payload.kind != self.task.value:
+                raise ValueError("payload kind does not match the requested task")
+        else:
+            if self.payload is not None:
+                raise ValueError("a refused/failed update must not carry a payload")
+            if self.reason_code is None:
+                raise ValueError("a refused/failed update must carry a reason code")
+        return self
+
+
+# --------------------------------------------------------------------------- #
+# Global aggregates (produced by the coordinator)
+# --------------------------------------------------------------------------- #
+class FeatureInventoryAggregate(WireModel):
+    """Features available at every participating site."""
+
+    kind: Literal["feature_inventory"] = "feature_inventory"
+    n_clients: int = Field(ge=2)
+    feature_names: tuple[FeatureName, ...]
+
+
+class FeatureSummaryAggregate(WireModel):
+    """Pooled per-feature moments over all participating sites."""
+
+    kind: Literal["feature_summary"] = "feature_summary"
+    n_clients: int = Field(ge=2)
+    n_samples: int = Field(ge=2)
+    feature_names: tuple[FeatureName, ...]
+    mean: tuple[float, ...]
+    variance: tuple[float, ...]
+
+
+GlobalAggregate = Annotated[
+    FeatureInventoryAggregate | FeatureSummaryAggregate, Field(discriminator="kind")
+]
+
+
+def encode(message: WireModel) -> bytes:
+    """Serialize a message to its canonical wire form (UTF-8 JSON)."""
+    return message.model_dump_json().encode("utf-8")
+
+
+def decode[T: WireModel](raw: bytes, model: type[T]) -> T:
+    """Parse and validate wire bytes. Raises ``ValueError`` on any violation."""
+    if len(raw) > MAX_MESSAGE_BYTES:
+        raise ValueError(f"message exceeds {MAX_MESSAGE_BYTES} bytes")
+    return model.model_validate_json(raw)

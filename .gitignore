@@ -65,3 +65,11 @@ luanmantegazine_*.csv
 sem_rotulo_triagem.csv
 candidatos_fora_da_janela.csv
 backfill_report.md
+
+# --- federated framework: local runtime state ---
+var/
+mlruns/
+mlartifacts/
+node_modules/
+.ruff_cache/
+.env

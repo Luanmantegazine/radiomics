@@ -1,0 +1,12 @@
+.git
+.venv
+var
+mlruns
+dataset*
+oasis_analysis
+tests
+frontend/node_modules
+**/__pycache__
+*.nii
+*.nii.gz
+*.mgz

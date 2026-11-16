@@ -472,3 +472,21 @@ Pure-Python tests run without OASIS data. The integration test uses the two pilo
 ## Data governance
 
 No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
+
+## Federated framework (MCI → AD conversion) — Stage 1
+
+A modular federated radiomics framework is being built alongside the pipeline
+above, in `shared/`, `client/`, `coordinator/`, `backend/`, `evaluation/`,
+`experiments/`, `frontend/` and `infrastructure/`. Stage 1 (architecture,
+client/coordinator contracts, simulated clients, isolation tests) is
+implemented; no scientific module exists yet and all Stage 1 data is synthetic.
+
+See [docs/arquitetura/etapa-1.md](docs/arquitetura/etapa-1.md). It uses its own
+Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
+`requirements.txt`:
+
+```bash
+uv sync --extra backend --extra dev
+uv run pytest tests/federated
+uv run python -m experiments.run_simulation --config experiments/configs/stage1_simulation.yaml
+```

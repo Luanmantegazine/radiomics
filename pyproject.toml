@@ -1,0 +1,65 @@
+# Federated radiomics framework (MCI -> AD conversion).
+#
+# This file governs the federated framework packages only (shared/, client/,
+# coordinator/, backend/, evaluation/, experiments/). The pre-existing OASIS-3
+# acquisition pipeline keeps its own pinned environment in requirements.txt.
+#
+# Exact, reproducible versions are frozen in uv.lock (`uv sync --frozen`).
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fedradiomics"
+version = "0.1.0"
+description = "Federated radiomic feature selection and prognostic modelling framework"
+requires-python = ">=3.12,<3.13"
+# Core: needed by every component (contracts, configuration, logging).
+dependencies = [
+    "pydantic>=2.7,<3",
+    "PyYAML>=6.0,<7",
+    "numpy>=1.26.4,<2",   # <2: PyRadiomics 3.0.1 segfaults with NumPy 2.x (see requirements.txt)
+    "structlog>=24.1,<26",
+]
+
+[project.optional-dependencies]
+# Central backend: REST API, persistence, experiment tracking.
+backend = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "SQLAlchemy>=2.0.30,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic-settings>=2.3,<3",
+    "mlflow-skinny>=2.16,<4",
+    "alembic>=1.13,<2",          # required by the MLflow SQL tracking store
+]
+# Scientific stack of the federated clients. NOT used in Stage 1; declared so
+# the dependency contract is explicit. PyRadiomics needs the two-step install
+# documented in requirements.txt.
+science = [
+    "SimpleITK>=2.0,<3",
+    "pandas>=2.0,<3",
+    "scipy>=1.10,<2",
+    "scikit-learn>=1.4,<2",
+    "scikit-survival>=0.23,<1",
+]
+# Flower transport adapter (planned for Stage 4, see docs/arquitetura).
+flower = ["flwr>=1.10,<2"]
+dev = [
+    "pytest>=8,<9",
+    "httpx>=0.27,<1",   # FastAPI TestClient
+    "ruff>=0.5",
+]
+
+[tool.setuptools.packages.find]
+include = ["shared*", "client*", "coordinator*", "backend*", "evaluation*", "experiments*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["dataset ", "oasis_analysis", "tests/test_*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # FastAPI Depends() in defaults
