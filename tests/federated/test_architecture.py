@@ -13,7 +13,7 @@ COMPONENTS = {"shared", "client", "coordinator", "backend", "evaluation", "exper
 #: component -> components it is allowed to import
 ALLOWED = {
     "shared": set(),
-    "client": {"shared"},
+    "client": {"shared", "evaluation"},
     "coordinator": {"shared"},
     "evaluation": {"shared"},
     "backend": {"shared", "coordinator"},

@@ -44,17 +44,18 @@ def texture(seed: int, shape=SHAPE) -> np.ndarray:
     return (100 + ramp + rng.normal(0, 25, shape)).astype(np.float32)
 
 
-def labels(shape=SHAPE) -> np.ndarray:
-    """Label 1: a box; label 2: a sphere."""
+def labels(shape=SHAPE, variant: int = 0) -> np.ndarray:
+    """Label 1: a box; label 2: a sphere. ``variant`` changes their sizes."""
     mask = np.zeros(shape, dtype=np.uint8)
-    mask[4:12, 5:15, 6:14] = 1
+    mask[4 : 12 + variant % 4, 5 : 15 - variant % 3, 6 : 14 + variant % 5] = 1
     x, y, z = np.indices(shape)
-    mask[(x - 19) ** 2 + (y - 20) ** 2 + (z - 20) ** 2 <= 36] = 2
+    mask[(x - 19) ** 2 + (y - 20) ** 2 + (z - 20) ** 2 <= (6 - variant % 3) ** 2] = 2
     return mask
 
 
 def write_site(root: Path, n_participants: int, *, seed: int, prefix: str = "P",
-               rois: dict[str, int] | None = None, followup: bool = True) -> Path:
+               rois: dict[str, int] | None = None, followup: bool = True,
+               vary_masks: bool = False) -> Path:
     """Write images, masks and a manifest for one simulated site."""
     rois = rois or {"box": 1, "sphere": 2}
     rng = np.random.default_rng(seed)
@@ -62,7 +63,8 @@ def write_site(root: Path, n_participants: int, *, seed: int, prefix: str = "P",
     for index in range(n_participants):
         participant = f"{prefix}{seed:02d}{index:03d}"
         write(texture(seed * 1000 + index), root / "images" / f"{participant}.nii.gz")
-        write(labels(), root / "masks" / f"{participant}.nii.gz")
+        write(labels(variant=index if vary_masks else 0),
+              root / "masks" / f"{participant}.nii.gz")
         time_months = f"{rng.uniform(6, 48):.2f}"
         for roi, label in rois.items():
             row = {
@@ -84,3 +86,19 @@ def write_manifest(path: Path, rows: list[dict]) -> Path:
         writer.writeheader()
         writer.writerows(rows)
     return path
+
+
+def survival_cohort(n: int = 300, p: int = 12, seed: int = 0):
+    """Synthetic time-to-event data with a planted structure (method tests only).
+
+    f0, f1 drive the hazard; f2 is a near-copy of f0; the rest is noise.
+    """
+    rng = np.random.default_rng(seed)
+    x = rng.normal(size=(n, p))
+    x[:, 2] = x[:, 0] + rng.normal(scale=0.1, size=n)
+    hazard = 0.03 * np.exp(0.9 * x[:, 0] + 0.7 * x[:, 1])
+    event_time = rng.exponential(1 / hazard)
+    censor_time = rng.uniform(5, 60, size=n)
+    time = np.minimum(event_time, censor_time)
+    event = event_time <= censor_time
+    return tuple(f"f{i}" for i in range(p)), x, time, event

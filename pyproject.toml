@@ -48,7 +48,7 @@ imaging = [
     "nibabel>=5.0,<6",   # raw NIfTI access: ITK's reader silently zeroes NaN/Inf
     "pandas>=2.0,<3",
 ]
-# Later stages (not installed yet).
+# Reliability, relevance, redundancy and selection (Stage 3); survival models later.
 science = [
     "scipy>=1.10,<2",
     "scikit-learn>=1.4,<2",

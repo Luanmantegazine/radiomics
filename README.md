@@ -473,23 +473,25 @@ Pure-Python tests run without OASIS data. The integration test uses the two pilo
 
 No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
 
-## Federated framework (MCI → AD conversion) — Stages 1–2
+## Federated framework (MCI → AD conversion) — Stages 1–3
 
 A modular federated radiomics framework is being built alongside the pipeline
 above, in `shared/`, `client/`, `coordinator/`, `backend/`, `evaluation/`,
 `experiments/`, `frontend/` and `infrastructure/`. Stage 1 (architecture,
-client/coordinator contracts, simulated clients, isolation tests) and Stage 2
+client/coordinator contracts, simulated clients, isolation tests), Stage 2
 (local radiomic pipeline: manifest, image/mask validation, PyRadiomics
-extraction, reproducible local outputs) are implemented. They have been tested
-on synthetic data and phantoms only.
+extraction, reproducible local outputs) and Stage 3 (reliability from repeated
+or perturbed observations, censoring-aware relevance, redundancy, local
+selectors and reference comparators) are implemented. They have been tested on
+synthetic data and phantoms only.
 
-See [docs/arquitetura/etapa-1.md](docs/arquitetura/etapa-1.md) and
-[docs/arquitetura/etapa-2.md](docs/arquitetura/etapa-2.md). It uses its own
+See [etapa-1](docs/arquitetura/etapa-1.md), [etapa-2](docs/arquitetura/etapa-2.md)
+and [etapa-3](docs/arquitetura/etapa-3.md) in `docs/arquitetura/`. It uses its own
 Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
 `requirements.txt`:
 
 ```bash
-uv sync --extra backend --extra dev --extra imaging
+uv sync --extra backend --extra dev --extra imaging --extra science
 uv run pytest tests/federated
 uv run python -m experiments.run_simulation --config experiments/configs/stage1_simulation.yaml
 ```

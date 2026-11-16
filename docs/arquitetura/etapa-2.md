@@ -154,7 +154,7 @@ uma conferência em imagens reais antes de combinar tabelas dos dois pipelines.
 ## 8. Como executar
 
 ```bash
-uv sync --extra backend --extra dev --extra imaging
+uv sync --extra backend --extra dev --extra imaging --extra science
 ```
 
 ```bash

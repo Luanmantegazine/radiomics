@@ -1,4 +1,4 @@
-"""Contracts of the client's scientific modules (Stage 2 implemented; 3-5 provisional).
+"""Contracts of the client's scientific modules (Stages 2-3 implemented; 5 provisional).
 
 Each provisional interface is
 reviewed and may change when its stage starts. All of them operate on local
@@ -40,8 +40,8 @@ class FeatureExtractor(Protocol):
 
 
 class ReliabilityEstimator(Protocol):
-    """Stage 3 - e.g. ICC. Requires repeated or alternative observations;
-    implementations must refuse to estimate reliability without them."""
+    """Stage 3 - implemented by :func:`client.reliability.icc`. Requires repeated
+    or alternative observations and refuses to estimate reliability without them."""
 
     def estimate(self, repeated_features: np.ndarray) -> np.ndarray:
         """``repeated_features`` has shape (n_subjects, n_repeats, n_features)."""
@@ -49,13 +49,14 @@ class ReliabilityEstimator(Protocol):
 
 
 class RelevanceScorer(Protocol):
-    """Stage 3 - prognostic relevance per feature, censoring-aware."""
+    """Stage 3 - implemented by the functions of :mod:`client.relevance`
+    (censoring-aware; they take arrays rather than a dataset)."""
 
     def score(self, dataset: LocalDataset) -> np.ndarray: ...
 
 
 class RedundancyEstimator(Protocol):
-    """Stage 3 - feature-by-feature redundancy (shape (p, p))."""
+    """Stage 3 - implemented by :func:`client.redundancy.correlation_matrix`."""
 
     def estimate(self, dataset: LocalDataset) -> np.ndarray: ...
 
