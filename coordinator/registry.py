@@ -3,7 +3,20 @@
 from __future__ import annotations
 
 from shared.config import ExperimentConfig
-from shared.protocol import ClientRegistration, ReasonCode
+from shared.protocol import ClientRegistration, ReasonCode, TaskKind
+
+
+def selection_tasks(config: ExperimentConfig) -> set[TaskKind]:
+    """Tasks a site must support to take part in the configured selection."""
+    selection = config.feature_selection
+    if selection is None:
+        return set()
+    tasks = {TaskKind.FEATURE_INVENTORY, TaskKind.FEATURE_RELEVANCE}
+    if selection.reliability_column is not None:
+        tasks.add(TaskKind.FEATURE_RELIABILITY)
+    if selection.redundancy is not None:
+        tasks.add(TaskKind.FEATURE_COVARIANCE)
+    return tasks
 
 
 class ClientRegistry:
@@ -27,7 +40,9 @@ class ClientRegistry:
         if registration.data_origin is not self._config.data_origin:
             # Never mix synthetic and real sites in one experiment.
             return ReasonCode.DATA_ORIGIN_MISMATCH
-        required = {spec.task for spec in self._config.rounds}
+        required = {spec.task for spec in self._config.rounds} | selection_tasks(
+            self._config
+        )
         if not required.issubset(registration.supported_tasks):
             return ReasonCode.UNSUPPORTED_TASK
         self._accepted[registration.client_id] = registration

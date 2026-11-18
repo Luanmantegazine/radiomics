@@ -29,7 +29,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 #: Version of the client/coordinator protocol. Bump on any contract change.
-PROTOCOL_VERSION = "1.0"
+PROTOCOL_VERSION = "1.1"
 
 #: Upper bound on a single serialized message (coarse exfiltration/volume guard).
 MAX_MESSAGE_BYTES = 1_048_576
@@ -66,6 +66,9 @@ class TaskKind(StrEnum):
 
     FEATURE_INVENTORY = "feature_inventory"
     FEATURE_SUMMARY = "feature_summary"
+    FEATURE_RELIABILITY = "feature_reliability"
+    FEATURE_RELEVANCE = "feature_relevance"
+    FEATURE_COVARIANCE = "feature_covariance"
 
 
 class DataOrigin(StrEnum):
@@ -94,6 +97,8 @@ class ReasonCode(StrEnum):
     UNKNOWN_CLIENT = "unknown_client"
     DUPLICATE_CLIENT = "duplicate_client"
     DATA_ORIGIN_MISMATCH = "data_origin_mismatch"
+    RELIABILITY_UNAVAILABLE = "reliability_unavailable"
+    TOO_FEW_EVENTS = "too_few_events"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -104,6 +109,10 @@ class PrivacyPolicy(WireModel):
     """A client never reports statistics computed on fewer participants."""
     min_clients_per_aggregate: int = Field(default=2, ge=2)
     """The coordinator never releases an aggregate built from fewer clients."""
+    min_events: int = Field(default=5, ge=1)
+    """A client never reports outcome-derived statistics computed from fewer
+    observed events: with a single event, the Cox score is that participant's
+    feature value minus the risk-set mean."""
 
 
 # --------------------------------------------------------------------------- #
@@ -192,8 +201,101 @@ class FeatureSummaryPayload(WireModel):
         return self
 
 
+def _check_feature_indexed(names: tuple[str, ...], *arrays: tuple) -> None:
+    if len(set(names)) != len(names):
+        raise ValueError("feature_names must be unique")
+    for array in arrays:
+        if len(array) != len(names):
+            raise ValueError("arrays must have exactly one entry per feature")
+
+
+def _check_finite(*arrays: tuple) -> None:
+    if not all(math.isfinite(v) for array in arrays for v in array if v is not None):
+        raise ValueError("statistics must be finite")
+
+
+class FeatureReliabilityPayload(WireModel):
+    """Per-feature reliability estimated locally from repeated observations.
+
+    ``values`` holds one summary per feature (e.g. the site's minimum ICC over
+    its reliability families); ``None`` means undefined at this site.
+    """
+
+    kind: Literal["feature_reliability"] = "feature_reliability"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    column: Literal["min_icc", "min_ci_low"]
+    n_subjects: int = Field(ge=2)
+    values: tuple[float | None, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> FeatureReliabilityPayload:
+        _check_feature_indexed(self.feature_names, self.values)
+        _check_finite(self.values)
+        if any(v is not None and not -1.0 <= v <= 1.0 for v in self.values):
+            raise ValueError("reliability values must lie in [-1, 1]")
+        return self
+
+
+class FeatureRelevancePayload(WireModel):
+    """Per-feature components of the univariable Cox score test at beta = 0.
+
+    ``score`` (U) and ``information`` (I) are computed on the site's own risk
+    sets, so summing them over sites gives the site-stratified score test.
+    """
+
+    kind: Literal["feature_relevance"] = "feature_relevance"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    score: tuple[float, ...]
+    information: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> FeatureRelevancePayload:
+        _check_feature_indexed(self.feature_names, self.score, self.information)
+        _check_finite(self.score, self.information)
+        if any(v < 0 for v in self.information):
+            raise ValueError("information cannot be negative")
+        if self.n_events > self.n_samples:
+            raise ValueError("n_events cannot exceed n_samples")
+        return self
+
+
+class FeatureCovariancePayload(WireModel):
+    """Within-site scatter matrix of a candidate feature set.
+
+    ``scatter_upper`` is the row-major upper triangle (diagonal included) of
+    sum_i (x_i - mean)(x_i - mean)^T over the site's participants, of length
+    p(p+1)/2. With ``rank_transformed`` the columns were replaced by their
+    within-site ranks first.
+    """
+
+    kind: Literal["feature_covariance"] = "feature_covariance"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=2, max_length=200)
+    n_samples: int = Field(ge=2)
+    rank_transformed: bool
+    scatter_upper: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> FeatureCovariancePayload:
+        _check_feature_indexed(self.feature_names)
+        p = len(self.feature_names)
+        if len(self.scatter_upper) != p * (p + 1) // 2:
+            raise ValueError("scatter_upper must have p(p+1)/2 entries")
+        _check_finite(self.scatter_upper)
+        diagonal = [self.scatter_upper[i * p - i * (i - 1) // 2] for i in range(p)]
+        if any(v < 0 for v in diagonal):
+            raise ValueError("scatter diagonal cannot be negative")
+        return self
+
+
 AuthorizedPayload = Annotated[
-    FeatureInventoryPayload | FeatureSummaryPayload, Field(discriminator="kind")
+    FeatureInventoryPayload
+    | FeatureSummaryPayload
+    | FeatureReliabilityPayload
+    | FeatureRelevancePayload
+    | FeatureCovariancePayload,
+    Field(discriminator="kind"),
 ]
 
 
@@ -255,8 +357,52 @@ class FeatureSummaryAggregate(WireModel):
     variance: tuple[float, ...]
 
 
+class FeatureReliabilityAggregate(WireModel):
+    """Reliability per feature combined over the reporting sites.
+
+    Limitation: ``minimum`` is by construction the value of one site.
+    """
+
+    kind: Literal["feature_reliability"] = "feature_reliability"
+    n_clients: int = Field(ge=2)
+    column: Literal["min_icc", "min_ci_low"]
+    feature_names: tuple[FeatureName, ...]
+    minimum: tuple[float | None, ...]
+    weighted_mean: tuple[float | None, ...]
+    """Mean weighted by the number of subjects of each site's reliability study."""
+
+
+class FeatureRelevanceAggregate(WireModel):
+    """Site-stratified relevance and between-site agreement per feature."""
+
+    kind: Literal["feature_relevance"] = "feature_relevance"
+    n_clients: int = Field(ge=2)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    feature_names: tuple[FeatureName, ...]
+    stratified_z: tuple[float | None, ...]
+    i_squared: tuple[float | None, ...]
+    sign_consistency: tuple[float | None, ...]
+
+
+class FeatureCorrelationAggregate(WireModel):
+    """Pooled within-site correlation of the candidate features (upper triangle)."""
+
+    kind: Literal["feature_covariance"] = "feature_covariance"
+    n_clients: int = Field(ge=2)
+    n_samples: int = Field(ge=2)
+    method: Literal["pearson", "spearman"]
+    feature_names: tuple[FeatureName, ...]
+    correlation_upper: tuple[float | None, ...]
+
+
 GlobalAggregate = Annotated[
-    FeatureInventoryAggregate | FeatureSummaryAggregate, Field(discriminator="kind")
+    FeatureInventoryAggregate
+    | FeatureSummaryAggregate
+    | FeatureReliabilityAggregate
+    | FeatureRelevanceAggregate
+    | FeatureCorrelationAggregate,
+    Field(discriminator="kind"),
 ]
 
 

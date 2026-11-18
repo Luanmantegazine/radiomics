@@ -34,10 +34,15 @@ class FeatureTableDataSource:
     """
 
     def __init__(
-        self, features_path: str | Path, manifest_path: str | Path, origin: DataOrigin
+        self,
+        features_path: str | Path,
+        manifest_path: str | Path,
+        origin: DataOrigin,
+        reliability_path: str | Path | None = None,
     ) -> None:
         self._features_path = Path(features_path)
         self._manifest_path = Path(manifest_path)
+        self._reliability_path = Path(reliability_path) if reliability_path else None
         self.origin = origin
 
     def load(self) -> LocalDataset:
@@ -67,4 +72,12 @@ class FeatureTableDataSource:
             time_months=np.array([followup[p].time_months for p in ids], dtype=float),
             event=np.array([followup[p].event for p in ids], dtype=bool),
             origin=self.origin,
+            reliability=self._load_reliability(),
         )
+
+    def _load_reliability(self):
+        if self._reliability_path is None:
+            return None
+        from client.reliability.study import load_reliability_estimates
+
+        return load_reliability_estimates(self._reliability_path)

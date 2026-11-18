@@ -109,6 +109,37 @@ class CostRecord(Base):
     unit: Mapped[str] = mapped_column(String(16))
 
 
+class FeatureSelectionRecord(Base):
+    """Released result of a federated selection run (global statistics only)."""
+
+    __tablename__ = "feature_selections"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("experiments.id"), index=True, unique=True
+    )
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class SelectedFeatureRecord(Base):
+    """One selected feature of one strategy (queryable form of the result)."""
+
+    __tablename__ = "selected_features"
+    __table_args__ = (UniqueConstraint("experiment_id", "strategy", "rank"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id"), index=True)
+    strategy: Mapped[str] = mapped_column(String(64))
+    rank: Mapped[int] = mapped_column(Integer)
+    feature: Mapped[str] = mapped_column(String(160))
+    ranking_score: Mapped[float] = mapped_column(Float)
+    reliability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relevance_z: Mapped[float | None] = mapped_column(Float, nullable=True)
+    relevance_p: Mapped[float | None] = mapped_column(Float, nullable=True)
+    agreement: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class ModelRecord(Base):
     """Registered model version (populated from Stage 5 onwards)."""
 

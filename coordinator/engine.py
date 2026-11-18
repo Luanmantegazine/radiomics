@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from coordinator.aggregation import AggregationError, get_strategy
@@ -10,20 +11,27 @@ from coordinator.ingress import IngressRejected, validate_update
 from coordinator.outcomes import ClientRoundOutcome, ExperimentOutcome, RoundOutcome
 from coordinator.ports import NullRecorder, RunRecorder
 from coordinator.registry import ClientRegistry
-from shared.config import ExperimentConfig, RoundSpec, config_hash
+from coordinator.selection.protocol import FederatedSelectionProtocol, RoundRequest
+from coordinator.selection.results import FederatedSelectionResult
+from shared.config import ExperimentConfig, config_hash
 from shared.logging import get_logger
 from shared.protocol import (
     ClientRegistration,
     ClientUpdate,
     FeatureInventoryAggregate,
+    FederatedPhase,
     ReasonCode,
     RegistrationAck,
     RoundConfig,
+    TaskKind,
     UpdateStatus,
+    WireModel,
     decode,
     encode,
 )
 from shared.seeding import derive_seed
+
+Aggregate = Callable[[Sequence[ClientUpdate]], WireModel]
 
 
 class Transport(Protocol):
@@ -42,9 +50,10 @@ class Transport(Protocol):
 class FederatedCoordinator:
     """Runs one experiment: admits clients, then executes the configured rounds.
 
-    State carried between rounds is limited to *global aggregates* (currently
-    the agreed feature schema); individual client updates are discarded after
-    aggregation.
+    State carried between fixed rounds is limited to *global aggregates* (the
+    agreed feature schema). During feature selection the protocol object keeps
+    per-site statistics in memory until the selection result is computed; they
+    are never persisted or returned.
     """
 
     def __init__(
@@ -101,48 +110,111 @@ class FederatedCoordinator:
         self._recorder.experiment_started(self._experiment_id)
         registered = self.register_clients()
         rounds: list[RoundOutcome] = []
+        selection: FederatedSelectionResult | None = None
+        selection_s = 0.0
         completed = len(registered) >= self._config.privacy.min_clients_per_aggregate
         if not completed:
             self._log.error("not_enough_clients", registered=len(registered))
         else:
-            for number, spec in enumerate(self._config.rounds, start=1):
-                outcome = self._run_round(number, spec, registered)
+            for spec in self._config.rounds:
+                outcome = self._run_round(
+                    len(rounds) + 1, spec.phase, spec.task, dict(spec.params),
+                    spec.aggregator, self._registry_aggregate(spec.aggregator, spec.task),
+                    registered,
+                )
                 rounds.append(outcome)
                 self._recorder.round_finished(outcome)
                 if not outcome.completed:
                     completed = False
                     break
+            if completed and self._config.feature_selection is not None:
+                completed, selection, selection_s = self._run_selection(rounds, registered)
         result = ExperimentOutcome(
             experiment_id=self._experiment_id,
             completed=completed,
             registered_clients=registered,
             rounds=tuple(rounds),
+            feature_selection=selection,
+            selection_s=selection_s,
             total_bytes=sum(c.bytes_sent + c.bytes_received for r in rounds for c in r.clients),
             duration_s=time.perf_counter() - started,
         )
         self._recorder.experiment_finished(result)
         return result
 
-    def _round_config(self, number: int, spec: RoundSpec) -> RoundConfig:
-        return RoundConfig(
+    def _run_selection(
+        self, rounds: list[RoundOutcome], clients: tuple[str, ...]
+    ) -> tuple[bool, FederatedSelectionResult | None, float]:
+        protocol = FederatedSelectionProtocol(
+            self._config.feature_selection, self._config.privacy, self._feature_names
+        )
+        while (request := protocol.next_request()) is not None:
+            outcome = self._run_round(
+                len(rounds) + 1, request.phase, request.task, request.params,
+                request.aggregator, self._protocol_aggregate(protocol, request), clients,
+                feature_names=request.feature_names,
+            )
+            rounds.append(outcome)
+            self._recorder.round_finished(outcome)
+            if not outcome.completed:
+                return False, None, 0.0
+        started = time.perf_counter()
+        try:
+            selection = protocol.result()
+        except AggregationError as exc:
+            self._log.error("selection_failed", reason=str(exc))
+            return False, None, time.perf_counter() - started
+        duration = time.perf_counter() - started
+        self._log.info(
+            "selection_finished",
+            strategies=len(selection.strategies),
+            duration_s=round(duration, 4),
+        )
+        self._recorder.selection_finished(self._experiment_id, selection)
+        return True, selection, duration
+
+    @staticmethod
+    def _protocol_aggregate(protocol: FederatedSelectionProtocol, request: RoundRequest):
+        return lambda updates: protocol.aggregate(request, updates)
+
+    @staticmethod
+    def _registry_aggregate(name: str, task: TaskKind) -> Aggregate:
+        def aggregate(updates: Sequence[ClientUpdate]) -> WireModel:
+            strategy = get_strategy(name)
+            if strategy.task is not task:
+                raise AggregationError(f"strategy {strategy.name} does not aggregate {task.value}")
+            return strategy.aggregate(updates)
+
+        return aggregate
+
+    def _run_round(
+        self,
+        number: int,
+        phase: FederatedPhase,
+        task: TaskKind,
+        params: dict,
+        aggregator: str,
+        aggregate_fn: Aggregate,
+        clients: tuple[str, ...],
+        *,
+        feature_names: tuple[str, ...] | None = None,
+    ) -> RoundOutcome:
+        started = time.perf_counter()
+        config = RoundConfig(
             protocol_version=self._config.protocol_version,
             experiment_id=self._experiment_id,
             round_id=f"{self._experiment_id}-r{number:03d}",
             round_number=number,
-            phase=spec.phase,
-            task=spec.task,
+            phase=phase,
+            task=task,
             seed=derive_seed(self._config.seed, "round", number),
             config_hash=self._config_hash,
             privacy=self._config.privacy,
-            feature_names=self._feature_names,
-            params=dict(spec.params),
+            feature_names=feature_names if feature_names is not None else self._feature_names,
+            params=params,
         )
-
-    def _run_round(self, number: int, spec: RoundSpec, clients: tuple[str, ...]) -> RoundOutcome:
-        started = time.perf_counter()
-        config = self._round_config(number, spec)
         raw_config = encode(config)
-        log = self._log.bind(round_id=config.round_id, task=spec.task.value)
+        log = self._log.bind(round_id=config.round_id, task=task.value)
         log.info("round_started", n_clients=len(clients))
 
         accepted: list[ClientUpdate] = []
@@ -190,12 +262,7 @@ class FederatedCoordinator:
         else:
             agg_started = time.perf_counter()
             try:
-                strategy = get_strategy(spec.aggregator)
-                if strategy.task is not spec.task:
-                    raise AggregationError(
-                        f"strategy {strategy.name} does not aggregate {spec.task.value}"
-                    )
-                aggregate = strategy.aggregate(accepted)
+                aggregate = aggregate_fn(accepted)
             except AggregationError as exc:
                 failure = f"aggregation_error: {exc}"
             aggregation_s = time.perf_counter() - agg_started
@@ -207,9 +274,9 @@ class FederatedCoordinator:
             experiment_id=self._experiment_id,
             round_id=config.round_id,
             round_number=number,
-            phase=spec.phase,
-            task=spec.task,
-            aggregator=spec.aggregator,
+            phase=phase,
+            task=task,
+            aggregator=aggregator,
             completed=failure is None,
             failure_reason=failure,
             aggregate=aggregate,

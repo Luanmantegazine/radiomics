@@ -39,6 +39,7 @@ import SimpleITK as sitk
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from client.data import ReliabilityEstimates
 from client.imaging.extraction import ExtractionConfig
 from client.imaging.manifest import Manifest, load_manifest
 from client.imaging.pipeline import FEATURES_FILE, run_extraction
@@ -222,6 +223,7 @@ def run_reliability_study(
             min_icc=("icc", lambda s: s.min(skipna=False)),
             min_ci_low=("ci_low", lambda s: s.min(skipna=False)),
             n_families=("family", "nunique"),
+            n_subjects=("n_subjects", "min"),
         )
         .reset_index()
         .sort_values("feature", key=lambda s: s.map(order))
@@ -230,6 +232,21 @@ def run_reliability_study(
     summary.insert(2, "icc_form", study.icc_form.value)
     summary.to_csv(output_dir / SUMMARY_FILE, index=False, lineterminator="\n")
     return summary
+
+
+def load_reliability_estimates(path: str | Path) -> ReliabilityEstimates:
+    """Load a ``reliability_summary.csv`` as :class:`client.data.ReliabilityEstimates`."""
+    table = pd.read_csv(path)
+    missing = {"feature", "min_icc", "min_ci_low", "n_subjects"} - set(table.columns)
+    if missing:
+        raise ValueError(f"{path} is missing column(s): {sorted(missing)}")
+    return ReliabilityEstimates(
+        values={
+            column: dict(zip(table["feature"], table[column].astype(float), strict=True))
+            for column in ("min_icc", "min_ci_low")
+        },
+        n_subjects=int(table["n_subjects"].min()),
+    )
 
 
 def load_reliability(path: str | Path, column: str = "min_icc") -> dict[str, float]:

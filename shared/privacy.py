@@ -8,6 +8,9 @@ Hypotheses and limitations
 * Threat model: honest-but-curious coordinator, honest clients. These checks
   prevent *accidental* disclosure by our own code; they are not a defence
   against a malicious client implementation.
+* The minimum number of events guards outcome-derived statistics: with one
+  event, the Cox score of a feature is that participant's value minus the
+  risk-set mean. It is a heuristic threshold, not a formal guarantee.
 * The minimum cohort size is a necessary, not sufficient, protection. Small
   cohorts and repeated queries can still leak information through aggregates;
   secure aggregation / differential privacy are out of scope for Stage 1.
@@ -37,11 +40,18 @@ def check_update(update: ClientUpdate, policy: PrivacyPolicy) -> None:
     """
     if update.status is not UpdateStatus.COMPLETED or update.payload is None:
         return
-    n_samples = getattr(update.payload, "n_samples", None)
-    if n_samples is not None and n_samples < policy.min_cohort_size:
+    for field in ("n_samples", "n_subjects"):
+        n = getattr(update.payload, field, None)
+        if n is not None and n < policy.min_cohort_size:
+            raise DisclosureViolation(
+                ReasonCode.COHORT_TOO_SMALL,
+                f"statistics on {n} participants (< {policy.min_cohort_size})",
+            )
+    n_events = getattr(update.payload, "n_events", None)
+    if n_events is not None and n_events < policy.min_events:
         raise DisclosureViolation(
-            ReasonCode.COHORT_TOO_SMALL,
-            f"statistics on {n_samples} participants (< {policy.min_cohort_size})",
+            ReasonCode.TOO_FEW_EVENTS,
+            f"outcome statistics on {n_events} events (< {policy.min_events})",
         )
 
 

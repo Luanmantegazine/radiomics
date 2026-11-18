@@ -20,6 +20,7 @@ from shared.protocol import (
     TaskKind,
     Token,
 )
+from shared.selection import FederatedSelectionConfig
 
 CONFIG_SCHEMA_VERSION = 1
 
@@ -37,12 +38,42 @@ class RoundSpec(ConfigModel):
     params: dict[Token, bool | int | float | str | None] = Field(default_factory=dict)
 
 
+class DerivedFeatureSpec(ConfigModel):
+    """A synthetic feature equal to another one plus independent noise."""
+
+    source: FeatureName
+    noise_sd: float = Field(ge=0)
+
+
 class SyntheticDataSourceSpec(ConfigModel):
     """Synthetic local dataset. For infrastructure tests only, never for science."""
 
     kind: Literal["synthetic"] = "synthetic"
     n_participants: int = Field(ge=1)
     feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    log_hazard_effects: dict[FeatureName, float] = Field(default_factory=dict)
+    """Planted effects on the conversion hazard (empty = no relation at all)."""
+    derived_features: dict[FeatureName, DerivedFeatureSpec] = Field(default_factory=dict)
+    """Correlated copies (to exercise redundancy handling)."""
+    measurement_noise_sd: dict[FeatureName, float] | None = None
+    """When set, the site simulates a second, noisy observation of every feature
+    (noise 0 for features not listed) and estimates its reliability from it."""
+
+    @model_validator(mode="after")
+    def _known_features(self) -> SyntheticDataSourceSpec:
+        listed = (
+            set(self.log_hazard_effects)
+            | set(self.measurement_noise_sd or {})
+            | set(self.derived_features)
+            | {d.source for d in self.derived_features.values()}
+        )
+        if not listed <= set(self.feature_names):
+            raise ValueError("effects/noise refer to features the source does not have")
+        if any(sd < 0 for sd in (self.measurement_noise_sd or {}).values()):
+            raise ValueError("measurement_noise_sd must be non-negative")
+        if set(self.derived_features) & {d.source for d in self.derived_features.values()}:
+            raise ValueError("a derived feature cannot be the source of another")
+        return self
 
 
 class FeatureTableSourceSpec(ConfigModel):
@@ -51,6 +82,8 @@ class FeatureTableSourceSpec(ConfigModel):
     kind: Literal["feature_table"] = "feature_table"
     features_path: str
     manifest_path: str
+    reliability_path: str | None = None
+    """``reliability_summary.csv`` of the site's reliability study, if any."""
     data_origin: DataOrigin
     """Declared provenance of the underlying images (phantoms are 'synthetic')."""
 
@@ -85,11 +118,15 @@ class ExperimentConfig(ConfigModel):
     privacy: PrivacyPolicy = Field(default_factory=PrivacyPolicy)
     expected_clients: tuple[ClientId, ...] = Field(min_length=2)
     """Allowlist of pseudonymised sites permitted to register."""
-    rounds: tuple[RoundSpec, ...] = Field(min_length=1)
+    rounds: tuple[RoundSpec, ...] = ()
+    """Fixed rounds (infrastructure phase), run before any feature selection."""
+    feature_selection: FederatedSelectionConfig | None = None
     simulation: SimulationSpec | None = None
 
     @model_validator(mode="after")
     def _consistency(self) -> ExperimentConfig:
+        if not self.rounds and self.feature_selection is None:
+            raise ValueError("configure at least one round or a feature_selection")
         if len(set(self.expected_clients)) != len(self.expected_clients):
             raise ValueError("expected_clients must be unique")
         if len(self.expected_clients) < self.privacy.min_clients_per_aggregate:

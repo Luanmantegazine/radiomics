@@ -27,7 +27,9 @@ def build_data_source(spec: SimulatedClientSpec, seed: int) -> LocalDataSource:
     # Imported lazily: the imaging stack is an optional dependency.
     from client.feature_table import FeatureTableDataSource
 
-    return FeatureTableDataSource(source.features_path, source.manifest_path, source.data_origin)
+    return FeatureTableDataSource(
+        source.features_path, source.manifest_path, source.data_origin, source.reliability_path
+    )
 
 
 def build_clients(experiment_id: str, config: ExperimentConfig) -> list[FederatedClient]:

@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import numpy as np
 
 from shared.protocol import DataOrigin
+
+
+@dataclass(frozen=True, slots=True)
+class ReliabilityEstimates:
+    """Local reliability summary (Stage 3) attached to a dataset.
+
+    Only ever produced from repeated or alternative observations.
+    """
+
+    values: Mapping[str, Mapping[str, float]]
+    """Summary column (e.g. ``min_icc``) -> feature -> value (NaN = undefined)."""
+    n_subjects: int
+    """Participants with complete repeated observations in the reliability study."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +39,7 @@ class LocalDataset:
     time_months: np.ndarray  # shape (n_participants,)
     event: np.ndarray  # shape (n_participants,), bool; False = right-censored
     origin: DataOrigin
+    reliability: ReliabilityEstimates | None = field(default=None)
 
     def __post_init__(self) -> None:
         n = len(self.participant_ids)

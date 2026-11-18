@@ -60,14 +60,20 @@ def _check(features: np.ndarray, time: np.ndarray, event: np.ndarray, min_events
         raise RelevanceUnavailable(f"{n_events} events observed, at least {min_events} required")
 
 
-def cox_score_test(
-    features: np.ndarray, time: np.ndarray, event: np.ndarray, *, min_events: int
-) -> RelevanceResult:
-    """Score test of H0: beta = 0 in a univariable Cox model, for every feature."""
+def cox_score_components(
+    features: np.ndarray, time: np.ndarray, event: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Score U and information I of a univariable Cox model at beta = 0.
+
+    Computed on the given risk sets only: summing (U, I) over sites gives the
+    score test of a Cox model stratified by site. Breslow handling of ties.
+    """
     x = np.asarray(features, dtype=float)
     time, event = np.asarray(time, dtype=float), np.asarray(event, dtype=bool)
-    _check(x, time, event, min_events)
     order = np.argsort(time, kind="stable")
+    # U and I are invariant to shifting x; centring avoids cancellation in the
+    # sum-of-squares formula for features with a large mean (e.g. volumes).
+    x = x - x.mean(axis=0)
     x, time, event = x[order], time[order], event[order]
     n = len(time)
     # Suffix sums: totals over the risk set {j : time_j >= time_i}.
@@ -83,6 +89,17 @@ def cox_score_test(
         mean = risk_sum[start] / at_risk
         score += x[failing].sum(axis=0) - d * mean
         information += d * np.clip(risk_sum_sq[start] / at_risk - mean**2, 0.0, None)
+    return score, information
+
+
+def cox_score_test(
+    features: np.ndarray, time: np.ndarray, event: np.ndarray, *, min_events: int
+) -> RelevanceResult:
+    """Score test of H0: beta = 0 in a univariable Cox model, for every feature."""
+    x = np.asarray(features, dtype=float)
+    time, event = np.asarray(time, dtype=float), np.asarray(event, dtype=bool)
+    _check(x, time, event, min_events)
+    score, information = cox_score_components(x, time, event)
     with np.errstate(divide="ignore", invalid="ignore"):
         z = np.where(information > 0, score / np.sqrt(information), np.nan)
     return RelevanceResult(
@@ -90,7 +107,7 @@ def cox_score_test(
         score=np.abs(z),
         statistic=z,
         p_value=2 * stats.norm.sf(np.abs(z)),
-        n_samples=n,
+        n_samples=len(time),
         n_events=int(event.sum()),
     )
 

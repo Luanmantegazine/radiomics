@@ -13,12 +13,15 @@ from backend.app.models import (
     ClientRecord,
     CostRecord,
     Experiment,
+    FeatureSelectionRecord,
     FederatedRound,
     RoundParticipation,
+    SelectedFeatureRecord,
     utcnow,
 )
 from backend.app.tracking import ExperimentTracker
 from coordinator.outcomes import ExperimentOutcome, RoundOutcome
+from coordinator.selection.results import FederatedSelectionResult
 from shared.protocol import ClientRegistration, ReasonCode
 
 
@@ -41,7 +44,8 @@ class DatabaseRunRecorder:
                     "seed": experiment.seed,
                     "config_hash": experiment.config_hash,
                     "protocol_version": experiment.protocol_version,
-                    "n_rounds": len(experiment.config["rounds"]),
+                    "n_fixed_rounds": len(experiment.config["rounds"]),
+                    "feature_selection": experiment.config.get("feature_selection") is not None,
                     "min_cohort_size": experiment.config["privacy"]["min_cohort_size"],
                 },
                 tags={"data_origin": experiment.data_origin, "experiment_id": experiment.id},
@@ -148,6 +152,42 @@ class DatabaseRunRecorder:
                 f"aggregates/round_{outcome.round_number:03d}.json",
             )
 
+    def selection_finished(self, experiment_id: str, result: FederatedSelectionResult) -> None:
+        with self._sessions() as session:
+            session.add(
+                FeatureSelectionRecord(
+                    experiment_id=self._experiment_id, result=result.model_dump(mode="json")
+                )
+            )
+            for strategy in result.strategies:
+                session.add_all(
+                    SelectedFeatureRecord(
+                        experiment_id=self._experiment_id,
+                        strategy=strategy.name,
+                        rank=item.rank,
+                        feature=item.feature,
+                        ranking_score=item.ranking_score,
+                        reliability=item.reliability,
+                        relevance_z=item.relevance_z,
+                        relevance_p=item.relevance_p,
+                        agreement=item.agreement,
+                    )
+                    for item in strategy.selected
+                )
+            session.commit()
+        metrics: dict[str, float] = {}
+        for strategy in result.strategies:
+            metrics[f"selection.{strategy.name}.n_selected"] = len(strategy.selected)
+            loso = strategy.leave_one_site_out
+            if loso is not None and loso.nogueira_stability is not None:
+                metrics[f"selection.{strategy.name}.loso_nogueira"] = loso.nogueira_stability
+            if loso is not None and loso.mean_jaccard_to_full is not None:
+                metrics[f"selection.{strategy.name}.loso_jaccard"] = loso.mean_jaccard_to_full
+        self._tracker.log_metrics(self._run_id, metrics, step=0)
+        self._tracker.log_dict(
+            self._run_id, result.model_dump(mode="json"), "feature_selection.json"
+        )
+
     def experiment_finished(self, outcome: ExperimentOutcome) -> None:
         with self._sessions() as session:
             experiment = session.get_one(Experiment, self._experiment_id)
@@ -166,6 +206,8 @@ class DatabaseRunRecorder:
                                metric="total_bytes", value=outcome.total_bytes, unit="bytes"),
                     CostRecord(experiment_id=self._experiment_id, scope="experiment",
                                metric="n_rounds", value=len(outcome.rounds), unit="count"),
+                    CostRecord(experiment_id=self._experiment_id, scope="coordinator",
+                               metric="selection_time", value=outcome.selection_s, unit="s"),
                 ]
             )
             session.commit()

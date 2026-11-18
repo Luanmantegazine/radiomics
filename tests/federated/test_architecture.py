@@ -14,7 +14,7 @@ COMPONENTS = {"shared", "client", "coordinator", "backend", "evaluation", "exper
 ALLOWED = {
     "shared": set(),
     "client": {"shared", "evaluation"},
-    "coordinator": {"shared"},
+    "coordinator": {"shared", "evaluation"},
     "evaluation": {"shared"},
     "backend": {"shared", "coordinator"},
     "experiments": {"shared", "client", "coordinator", "backend", "evaluation"},
@@ -68,3 +68,10 @@ def test_imaging_pipeline_has_no_network_or_transport_dependency():
     assert not [
         (p, t) for p, t in _imports("client") if "imaging" in p and t in transport
     ]
+
+
+def test_coordinator_aggregation_needs_only_numpy():
+    """The coordinator runs where the backend runs; it must not need the science stack."""
+    heavy = {"scipy", "sksurv", "sklearn", "radiomics", "SimpleITK", "pandas", "torch"}
+    for package in ("coordinator", "evaluation"):
+        assert not [(p, t) for p, t in _imports(package) if t in heavy]

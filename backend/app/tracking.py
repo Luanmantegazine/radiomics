@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Protocol
 
 
@@ -36,6 +37,10 @@ class MlflowTracker:
     """Tracks runs with MLflow using explicit run ids (no global active run)."""
 
     def __init__(self, tracking_uri: str, artifact_root: str = "") -> None:
+        # MLflow sends usage telemetry to an external host by default; a medical
+        # research deployment should not. An explicit setting still wins.
+        os.environ.setdefault("MLFLOW_DISABLE_TELEMETRY", "true")
+        os.environ.setdefault("DO_NOT_TRACK", "true")
         from mlflow.tracking import MlflowClient  # imported lazily: heavy dependency
 
         self._client = MlflowClient(tracking_uri=tracking_uri)

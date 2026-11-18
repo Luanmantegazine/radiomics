@@ -92,6 +92,17 @@ class CostOut(ApiModel):
     unit: str
 
 
+class SelectedFeatureOut(ApiModel):
+    strategy: str
+    rank: int
+    feature: str
+    ranking_score: float
+    reliability: float | None
+    relevance_z: float | None
+    relevance_p: float | None
+    agreement: float | None
+
+
 class ModelOut(ApiModel):
     id: int
     experiment_id: str

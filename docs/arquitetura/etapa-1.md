@@ -70,7 +70,7 @@ nenhum: a agregação é escolhida por nome na configuração
 
 ## 3. Contratos de comunicação cliente ↔ coordenador
 
-Versão do protocolo: `1.0`. Formato: JSON UTF-8, no máximo 1 MiB por mensagem.
+Versão do protocolo: `1.0` na Etapa 1; `1.1` a partir da Etapa 4 (ver `etapa-4.md`). Formato: JSON UTF-8, no máximo 1 MiB por mensagem.
 Todos os modelos são imutáveis e **fechados** (`extra="forbid"`).
 
 | Mensagem | Direção | Conteúdo |
@@ -121,7 +121,9 @@ sequenceDiagram
    na entrada do coordenador (`coordinator/ingress.py`).
 6. **Sem retenção.** O coordenador descarta as atualizações individuais após
    agregar; o backend recebe e grava apenas agregados globais, metadados
-   (status, tamanho da coorte) e custos.
+   (status, tamanho da coorte) e custos. Exceção da Etapa 4: na seleção
+   federada, as estatísticas por site ficam em memória até o fim da seleção
+   (ver `etapa-4.md`); continuam sem ser gravadas ou liberadas.
 
 ### Hipóteses e limitações
 

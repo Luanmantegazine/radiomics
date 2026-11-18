@@ -63,9 +63,22 @@ def main(argv: list[str] | None = None) -> int:
         "registered_clients": outcome.registered_clients,
         "rounds": [
             {"round": r.round_number, "task": r.task.value, "completed": r.completed,
-             "aggregate": r.aggregate.model_dump(mode="json") if r.aggregate else None}
+             "aggregate": r.aggregate.model_dump(mode="json")
+             if r.aggregate and r.aggregate.kind in {"feature_inventory", "feature_summary"}
+             else None}
             for r in outcome.rounds
         ],
+        "feature_selection": None
+        if outcome.feature_selection is None
+        else {
+            strategy.name: {
+                "selected": [f.feature for f in strategy.selected],
+                "loso_nogueira": strategy.leave_one_site_out.nogueira_stability
+                if strategy.leave_one_site_out
+                else None,
+            }
+            for strategy in outcome.feature_selection.strategies
+        },
         "total_bytes": outcome.total_bytes,
         "duration_s": round(outcome.duration_s, 4),
     }

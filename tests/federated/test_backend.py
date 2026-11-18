@@ -164,3 +164,49 @@ def test_subprocess_launcher_end_to_end(settings, config):
             time.sleep(0.2)
         assert experiment["status"] == "completed", experiment["error"]
         assert len(api.get(f"/results/{experiment_id}").json()["rounds"]) == 2
+
+
+def test_federated_selection_through_the_api(api, settings):
+    """Stage 4: run, query the released selection, and scan the stored data."""
+    from shared.config import load_experiment_config
+    from tests.federated.test_federated_selection import STAGE4
+
+    config = load_experiment_config(STAGE4)
+    experiment_id = api.post("/experiments", json=config.model_dump(mode="json")).json()["id"]
+    assert api.post(f"/experiments/{experiment_id}/run").status_code == 202
+    assert api.get(f"/experiments/{experiment_id}").json()["status"] == "completed"
+
+    rounds = api.get("/federated-rounds", params={"experiment_id": experiment_id}).json()
+    assert [r["task"] for r in rounds] == [
+        "feature_inventory", "feature_reliability", "feature_relevance", "feature_covariance",
+    ]
+    selection = api.get(f"/results/{experiment_id}/feature-selection").json()
+    assert selection["data_origin"] == "synthetic"
+    assert len(selection["strategies"]) == 6
+    rows = api.get(f"/results/{experiment_id}/selected-features",
+                   params={"strategy": "sequential_stratified"}).json()
+    assert [r["rank"] for r in rows] == [1, 2, 3]
+    assert rows[0]["feature"] == "feat_strong" and rows[0]["relevance_p"] < 1e-6
+    costs = {c["metric"] for c in api.get(f"/results/{experiment_id}/costs").json()}
+    assert "selection_time" in costs
+
+    # Per-site statistics never reach the central database.
+    from experiments.simulation import build_clients
+    per_site = set()
+    from client.relevance import cox_score_components
+
+    for client in build_clients(experiment_id, config):
+        dataset = client._data_source.load()
+        u, i = cox_score_components(dataset.features, dataset.time_months, dataset.event)
+        per_site.update(u.tolist() + i.tolist())
+    db_path = settings.database_url.removeprefix("sqlite:///")
+    with sqlite3.connect(db_path) as connection:
+        tables = [r[0] for r in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")]
+        stored = json.dumps(
+            {t: connection.execute(f"SELECT * FROM {t}").fetchall() for t in tables}, default=str
+        )
+    assert {"feature_selections", "selected_features"} <= set(tables)
+    assert not any(repr(v) in stored for v in per_site)
+    assert "SYN-" not in stored
+    assert api.get("/results/exp-missing/feature-selection").status_code == 404
