@@ -140,6 +140,33 @@ class SelectedFeatureRecord(Base):
     agreement: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class HarmonizationRecord(Base):
+    """Harmonization summary: site effects before/after, clinical site differences."""
+
+    __tablename__ = "harmonizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    experiment_id: Mapped[str] = mapped_column(
+        ForeignKey("experiments.id"), index=True, unique=True
+    )
+    result: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
+class EvaluationRecord(Base):
+    """Pooled (and, if released, per-site) metrics of one model/variant/scope."""
+
+    __tablename__ = "evaluations"
+    __table_args__ = (UniqueConstraint("experiment_id", "model_name", "variant", "scope"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id"), index=True)
+    model_name: Mapped[str] = mapped_column(String(64))
+    variant: Mapped[str] = mapped_column(String(16))
+    scope: Mapped[str] = mapped_column(String(96))
+    n_clients: Mapped[int] = mapped_column(Integer)
+    metrics: Mapped[dict[str, Any]] = mapped_column(JSON)
+
+
 class ModelRecord(Base):
     """A trained (or failed) model of an experiment.
 

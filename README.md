@@ -473,7 +473,7 @@ Pure-Python tests run without OASIS data. The integration test uses the two pilo
 
 No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
 
-## Federated framework (MCI → AD conversion) — Stages 1–5
+## Federated framework (MCI → AD conversion) — Stages 1–6
 
 A modular federated radiomics framework is being built alongside the pipeline
 above, in `shared/`, `client/`, `coordinator/`, `backend/`, `evaluation/`,
@@ -487,12 +487,17 @@ reliability, prognostic relevance, between-site agreement and redundancy, with
 strategy comparison and leave-one-site-out stability) and Stage 5 (Cox models
 and horizon-specific logistic comparators with explicit censoring handling,
 trained locally or federated by exact Newton-Raphson on summed site
-contributions, on a training partition held apart from evaluation) are
-implemented. They have been tested on synthetic data and phantoms only.
+contributions, on a training partition held apart from evaluation) and Stage 6
+(federated ComBat harmonization with site-effect assessment, and distributed
+evaluation: time-dependent AUC and C, IPCW Brier score, calibration, decision
+curves, local/federated/reference models and leave-one-site-out external
+validation) are implemented. They have been tested on synthetic data and
+phantoms only.
 
 See [etapa-1](docs/arquitetura/etapa-1.md), [etapa-2](docs/arquitetura/etapa-2.md)
-[etapa-3](docs/arquitetura/etapa-3.md), [etapa-4](docs/arquitetura/etapa-4.md)
-and [etapa-5](docs/arquitetura/etapa-5.md) in `docs/arquitetura/`. It uses its own
+[etapa-3](docs/arquitetura/etapa-3.md), [etapa-4](docs/arquitetura/etapa-4.md),
+[etapa-5](docs/arquitetura/etapa-5.md) and [etapa-6](docs/arquitetura/etapa-6.md)
+in `docs/arquitetura/`. It uses its own
 Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
 `requirements.txt`:
 

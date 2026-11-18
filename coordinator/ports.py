@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from coordinator.evaluation.protocol import EvaluationResult
+from coordinator.harmonization.protocol import HarmonizationResult
 from coordinator.outcomes import ExperimentOutcome, RoundOutcome
 from coordinator.selection.results import FederatedSelectionResult
 from coordinator.training.protocol import TrainingResult
@@ -26,6 +28,11 @@ class RunRecorder(Protocol):
     def selection_finished(self, experiment_id: str, result: FederatedSelectionResult) -> None: ...
 
     def training_finished(self, experiment_id: str, result: TrainingResult) -> None: ...
+
+    def harmonization_finished(self, experiment_id: str, result: HarmonizationResult) -> None:
+        ...
+
+    def evaluation_finished(self, experiment_id: str, result: EvaluationResult) -> None: ...
 
     def experiment_finished(self, outcome: ExperimentOutcome) -> None: ...
 
@@ -48,6 +55,12 @@ class NullRecorder:
         return None
 
     def training_finished(self, experiment_id: str, result: TrainingResult) -> None:
+        return None
+
+    def harmonization_finished(self, experiment_id: str, result: HarmonizationResult) -> None:
+        return None
+
+    def evaluation_finished(self, experiment_id: str, result: EvaluationResult) -> None:
         return None
 
     def experiment_finished(self, outcome: ExperimentOutcome) -> None:

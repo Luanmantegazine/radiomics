@@ -41,6 +41,10 @@ class SyntheticDataSource:
         n, p = self._spec.n_participants, len(self._spec.feature_names)
         names = self._spec.feature_names
         location = rng.normal(0.0, 1.0, size=p)  # site-specific offset
+        biological = np.array([name in self._spec.biological_features for name in names])
+        location[biological] = [
+            self._spec.biological_features[name] for name in np.array(names)[biological]
+        ]
         features = rng.normal(location, 1.0, size=(n, p))
         column = {name: i for i, name in enumerate(names)}
         for target, derived in self._spec.derived_features.items():
@@ -51,7 +55,10 @@ class SyntheticDataSource:
                 + rng.normal(0.0, derived.noise_sd, size=n)
             )
         beta = np.array([self._spec.log_hazard_effects.get(name, 0.0) for name in names])
-        hazard = self.BASE_HAZARD * np.exp((features - location) @ beta)
+        # Biological features act on their true scale (their site mean matters);
+        # technical offsets do not change risk.
+        risk_scale = np.where(biological, features, features - location)
+        hazard = self.BASE_HAZARD * np.exp(risk_scale @ beta)
         event_time = rng.exponential(1.0 / hazard)
         follow_up = rng.uniform(1.0, self.MAX_FOLLOW_UP, size=n)
         reliability = None
@@ -59,13 +66,17 @@ class SyntheticDataSource:
             sd = np.array([self._spec.measurement_noise_sd.get(name, 0.0) for name in names])
             repeat = features + rng.normal(size=(n, p)) * sd
             result = icc(np.stack([features, repeat], axis=1), IccForm.ICC2)
-            reliability = ReliabilityEstimates(
+            reliability = ReliabilityEstimates(  # computed before the scanner effect
                 values={
                     "min_icc": dict(zip(names, result.estimate.tolist(), strict=True)),
                     "min_ci_low": dict(zip(names, result.ci_low.tolist(), strict=True)),
                 },
                 n_subjects=n,
             )
+        technical = ~biological
+        features[:, technical] = location[technical] + self._spec.scanner_scale * (
+            features[:, technical] - location[technical]
+        )
         return LocalDataset(
             participant_ids=tuple(f"SYN-{self._client_id}-{i:05d}" for i in range(n)),
             feature_names=names,

@@ -45,6 +45,7 @@ from coordinator.selection.strategies import (
 from evaluation.stability import jaccard, nogueira_stability
 from shared.protocol import (
     ClientUpdate,
+    EvaluationRequest,
     FeatureCorrelationAggregate,
     FeatureCovariancePayload,
     FeatureRelevanceAggregate,
@@ -52,6 +53,7 @@ from shared.protocol import (
     FeatureReliabilityAggregate,
     FeatureReliabilityPayload,
     FederatedPhase,
+    HarmonizationState,
     ModelState,
     PrivacyPolicy,
     TaskKind,
@@ -70,6 +72,12 @@ class RoundRequest:
     params: dict
     aggregator: str
     model: ModelState | None = None
+    harmonization: HarmonizationState | None = None
+    evaluation: EvaluationRequest | None = None
+    clients: tuple[str, ...] | None = None
+    """Restrict the round to these sites (default: all registered)."""
+    min_clients: int | None = None
+    """Override of the minimum number of valid updates (single-site evaluation)."""
 
 
 def _optional(values: np.ndarray) -> tuple[float | None, ...]:

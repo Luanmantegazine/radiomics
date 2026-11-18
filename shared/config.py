@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from shared.evaluation import EvaluationConfig, HarmonizationConfig
 from shared.protocol import (
     PROTOCOL_VERSION,
     ClientId,
@@ -55,6 +56,12 @@ class SyntheticDataSourceSpec(ConfigModel):
     log_hazard_effects: dict[FeatureName, float] = Field(default_factory=dict)
     """Planted effects on the conversion hazard (empty = no relation at all)."""
     derived_features: dict[FeatureName, DerivedFeatureSpec] = Field(default_factory=dict)
+    scanner_scale: float = Field(default=1.0, gt=0)
+    """Technical multiplicative site effect on observed (non-biological) features;
+    it does not change the true values that drive the hazard."""
+    biological_features: dict[FeatureName, float] = Field(default_factory=dict)
+    """Features without technical site effects, with their site mean (e.g. a
+    clinical covariate whose distribution genuinely differs between sites)."""
     """Correlated copies (to exercise redundancy handling)."""
     measurement_noise_sd: dict[FeatureName, float] | None = None
     """When set, the site simulates a second, noisy observation of every feature
@@ -67,6 +74,7 @@ class SyntheticDataSourceSpec(ConfigModel):
             | set(self.measurement_noise_sd or {})
             | set(self.derived_features)
             | {d.source for d in self.derived_features.values()}
+            | set(self.biological_features)
         )
         if not listed <= set(self.feature_names):
             raise ValueError("effects/noise refer to features the source does not have")
@@ -123,14 +131,24 @@ class ExperimentConfig(ConfigModel):
     """Fixed rounds (infrastructure phase), run before any feature selection."""
     feature_selection: FederatedSelectionConfig | None = None
     training: TrainingConfig | None = None
+    harmonization: HarmonizationConfig | None = None
+    """Run before feature selection; parameters estimated on training partitions."""
+    evaluation: EvaluationConfig | None = None
     data_split: DataSplitSpec | None = None
     """When set, selection and training use only each site's training partition."""
     simulation: SimulationSpec | None = None
 
     @model_validator(mode="after")
     def _consistency(self) -> ExperimentConfig:
-        if not self.rounds and self.feature_selection is None and self.training is None:
-            raise ValueError("configure at least one round, a feature_selection or training")
+        if not (self.rounds or self.feature_selection or self.training or self.harmonization):
+            raise ValueError(
+                "configure at least one round, harmonization, feature_selection or training"
+            )
+        if self.evaluation is not None:
+            if self.training is None:
+                raise ValueError("evaluation needs trained models (a training section)")
+            if self.evaluation.partition == "test" and self.data_split is None:
+                raise ValueError("evaluation on the test partition needs data_split")
         if self.training is not None:
             strategies = (
                 {s.name for s in self.feature_selection.strategies}

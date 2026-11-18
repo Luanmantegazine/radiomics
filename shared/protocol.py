@@ -28,8 +28,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from shared.models import ReleasedModel
+from shared.training import CoxSpec, HorizonLogisticSpec
+
 #: Version of the client/coordinator protocol. Bump on any contract change.
-PROTOCOL_VERSION = "1.2"
+PROTOCOL_VERSION = "1.3"
 
 #: Upper bound on a single serialized message (coarse exfiltration/volume guard).
 MAX_MESSAGE_BYTES = 1_048_576
@@ -72,6 +75,10 @@ class TaskKind(StrEnum):
     MODEL_UPDATE = "model_update"
     BASELINE_HAZARD = "baseline_hazard"
     SITE_INTERCEPT = "site_intercept"
+    HARMONIZATION_STATISTICS = "harmonization_statistics"
+    HARMONIZATION_VARIANCE = "harmonization_variance"
+    HARMONIZATION_APPLY = "harmonization_apply"
+    MODEL_EVALUATION = "model_evaluation"
 
 
 class DataOrigin(StrEnum):
@@ -186,6 +193,38 @@ class ModelState(WireModel):
         return self
 
 
+class HarmonizationState(WireModel):
+    """Global ComBat quantities sent to sites (no site-specific value)."""
+
+    covariates: tuple[FeatureName, ...]
+    beta: tuple[float, ...] = ()
+    """Covariate effects, row-major (n_covariates x n_features)."""
+    grand_mean: tuple[float, ...] = ()
+    var_pooled: tuple[float, ...] = ()
+    empirical_bayes: bool = True
+    eb_tolerance: float = Field(default=1e-4, gt=0, lt=1)
+
+    @model_validator(mode="after")
+    def _finite(self) -> HarmonizationState:
+        if not all(math.isfinite(v) for v in (*self.beta, *self.grand_mean, *self.var_pooled)):
+            raise ValueError("harmonization state must be finite")
+        if any(v <= 0 for v in self.var_pooled):
+            raise ValueError("pooled variance must be positive")
+        return self
+
+
+class EvaluationRequest(WireModel):
+    """What a site must evaluate in a ``model_evaluation`` round."""
+
+    variant: Literal["released", "site_baseline", "local"]
+    model: ReleasedModel
+    """Global released model (coefficients, standardisation, pooled baseline)."""
+    model_spec: CoxSpec | HorizonLogisticSpec | None = None
+    """For the ``local`` variant: the configuration to refit on the site alone."""
+    evaluation_partition: Literal["test", "all"]
+    grid: tuple[float, ...] = Field(min_length=3)
+
+
 # --------------------------------------------------------------------------- #
 # Round configuration
 # --------------------------------------------------------------------------- #
@@ -209,6 +248,8 @@ class RoundConfig(WireModel):
     partition: PartitionSpec | None = None
     """Local partition to use; None = all local participants."""
     model: ModelState | None = None
+    harmonization: HarmonizationState | None = None
+    evaluation: EvaluationRequest | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -400,6 +441,107 @@ class SiteInterceptPayload(WireModel):
         return self
 
 
+class HarmonizationStatisticsPayload(WireModel):
+    """Regression sums for ComBat and the site's cohort profile."""
+
+    kind: Literal["harmonization_statistics"] = "harmonization_statistics"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    covariate_names: tuple[FeatureName, ...]
+    n_samples: int = Field(ge=2)
+    n_converted: int = Field(ge=0)
+    """Observed conversions (any time) - a count, for the cohort profile."""
+    median_follow_up: float | None
+    """Reverse Kaplan-Meier median follow-up in months (None if not reached)."""
+    sum_x: tuple[float, ...]
+    sum_xx_upper: tuple[float, ...]
+    sum_y: tuple[float, ...]
+    sum_yy: tuple[float, ...]
+    sum_xy: tuple[float, ...]
+    """Row-major (n_covariates x n_features)."""
+
+    @model_validator(mode="after")
+    def _shape(self) -> HarmonizationStatisticsPayload:
+        _check_feature_indexed(self.feature_names, self.sum_y, self.sum_yy)
+        c, p = len(self.covariate_names), len(self.feature_names)
+        if len(self.sum_x) != c or len(self.sum_xx_upper) != c * (c + 1) // 2:
+            raise ValueError("covariate sums have the wrong length")
+        if len(self.sum_xy) != c * p:
+            raise ValueError("sum_xy must have n_covariates x n_features entries")
+        _check_finite(self.sum_x, self.sum_xx_upper, self.sum_y, self.sum_yy, self.sum_xy,
+                      (self.median_follow_up,))
+        if self.n_converted > self.n_samples:
+            raise ValueError("n_converted cannot exceed n_samples")
+        return self
+
+
+class HarmonizationVariancePayload(WireModel):
+    kind: Literal["harmonization_variance"] = "harmonization_variance"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    n_samples: int = Field(ge=2)
+    residual_ss: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> HarmonizationVariancePayload:
+        _check_feature_indexed(self.feature_names, self.residual_ss)
+        _check_finite(self.residual_ss)
+        return self
+
+
+class HarmonizationApplyPayload(WireModel):
+    """Sums of the harmonized training data (to measure the remaining site effect)."""
+
+    kind: Literal["harmonization_apply"] = "harmonization_apply"
+    feature_names: tuple[FeatureName, ...] = Field(min_length=1)
+    n_samples: int = Field(ge=2)
+    sum_y: tuple[float, ...]
+    sum_yy: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> HarmonizationApplyPayload:
+        _check_feature_indexed(self.feature_names, self.sum_y, self.sum_yy)
+        _check_finite(self.sum_y, self.sum_yy)
+        return self
+
+
+class HorizonEvaluation(WireModel):
+    """Additive evaluation statistics at one horizon (see ``evaluation.metrics``)."""
+
+    horizon_months: float = Field(gt=0)
+    available: bool
+    """False when the model gives no prediction at this horizon (beyond follow-up)."""
+    n: int = Field(default=0, ge=0)
+    n_events: int = Field(default=0, ge=0)
+    weight_sum: float = 0.0
+    weighted_events: float = 0.0
+    brier_sum: float = 0.0
+    auc_num: float = 0.0
+    auc_den: float = 0.0
+    c_num: float = 0.0
+    c_den: float = 0.0
+    edges: tuple[float, ...] = ()
+    bin_n: tuple[float, ...] = ()
+    bin_w: tuple[float, ...] = ()
+    bin_wy: tuple[float, ...] = ()
+    bin_wp: tuple[float, ...] = ()
+
+    @model_validator(mode="after")
+    def _shape(self) -> HorizonEvaluation:
+        bins = max(len(self.edges) - 1, 0)
+        if any(len(v) != bins for v in (self.bin_n, self.bin_w, self.bin_wy, self.bin_wp)):
+            raise ValueError("one value per bin")
+        _check_finite(self.edges, self.bin_n, self.bin_w, self.bin_wy, self.bin_wp,
+                      (self.weight_sum, self.weighted_events, self.brier_sum, self.auc_num,
+                       self.auc_den, self.c_num, self.c_den))
+        return self
+
+
+class ModelEvaluationPayload(WireModel):
+    kind: Literal["model_evaluation"] = "model_evaluation"
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    horizons: tuple[HorizonEvaluation, ...] = Field(min_length=1)
+
+
 AuthorizedPayload = Annotated[
     FeatureInventoryPayload
     | FeatureSummaryPayload
@@ -408,7 +550,11 @@ AuthorizedPayload = Annotated[
     | FeatureCovariancePayload
     | ModelUpdatePayload
     | BaselineHazardPayload
-    | SiteInterceptPayload,
+    | SiteInterceptPayload
+    | HarmonizationStatisticsPayload
+    | HarmonizationVariancePayload
+    | HarmonizationApplyPayload
+    | ModelEvaluationPayload,
     Field(discriminator="kind"),
 ]
 
@@ -541,6 +687,51 @@ class SiteInterceptAggregate(WireModel):
     """Average of the site intercepts weighted by site size (see docs)."""
 
 
+class SiteEffectAggregate(WireModel):
+    """Between-site share of variance per feature (before or after harmonization)."""
+
+    kind: Literal["site_effect"] = "site_effect"
+    stage: Literal["before", "after", "variance"]
+    n_clients: int = Field(ge=2)
+    n_samples: int = Field(ge=2)
+    feature_names: tuple[FeatureName, ...]
+    eta_squared: tuple[float | None, ...]
+
+
+class MetricsSummary(WireModel):
+    horizon_months: float
+    available: bool
+    n: int = 0
+    n_events: int = 0
+    observed_incidence: float | None = None
+    brier: float | None = None
+    scaled_brier: float | None = None
+    auc: float | None = None
+    c_index: float | None = None
+    o_e: float | None = None
+    calibration_error: float | None = None
+    calibration: tuple[dict, ...] = ()
+    decision_curve: tuple[dict, ...] = ()
+
+
+class SiteMetrics(WireModel):
+    client_id: ClientId
+    horizons: tuple[MetricsSummary, ...]
+
+
+class ModelEvaluationAggregate(WireModel):
+    kind: Literal["model_evaluation"] = "model_evaluation"
+    model_name: str
+    variant: Literal["released", "site_baseline", "local"]
+    scope: str
+    """``internal`` or ``external:<client_id>``."""
+    feature_names: tuple[FeatureName, ...] = ()
+    """Features of the evaluated model (they can differ between external folds)."""
+    n_clients: int = Field(ge=1)
+    pooled: tuple[MetricsSummary, ...]
+    sites: tuple[SiteMetrics, ...] = ()
+
+
 GlobalAggregate = Annotated[
     FeatureInventoryAggregate
     | FeatureSummaryAggregate
@@ -549,7 +740,9 @@ GlobalAggregate = Annotated[
     | FeatureCorrelationAggregate
     | ModelIterationAggregate
     | BaselineHazardAggregate
-    | SiteInterceptAggregate,
+    | SiteInterceptAggregate
+    | SiteEffectAggregate
+    | ModelEvaluationAggregate,
     Field(discriminator="kind"),
 ]
 

@@ -33,6 +33,17 @@ def training_tasks(config: ExperimentConfig) -> set[TaskKind]:
     return tasks
 
 
+def stage6_tasks(config: ExperimentConfig) -> set[TaskKind]:
+    tasks: set[TaskKind] = set()
+    if config.harmonization is not None:
+        tasks.add(TaskKind.HARMONIZATION_STATISTICS)
+        if config.harmonization.method == "combat":
+            tasks |= {TaskKind.HARMONIZATION_VARIANCE, TaskKind.HARMONIZATION_APPLY}
+    if config.evaluation is not None:
+        tasks.add(TaskKind.MODEL_EVALUATION)
+    return tasks
+
+
 class ClientRegistry:
     """Admission control: only allowlisted, protocol-compatible sites join."""
 
@@ -58,6 +69,7 @@ class ClientRegistry:
             {spec.task for spec in self._config.rounds}
             | selection_tasks(self._config)
             | training_tasks(self._config)
+            | stage6_tasks(self._config)
         )
         if not required.issubset(registration.supported_tasks):
             return ReasonCode.UNSUPPORTED_TASK

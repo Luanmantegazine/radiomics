@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from coordinator.evaluation.protocol import EvaluationResult
+from coordinator.harmonization.protocol import HarmonizationResult
 from coordinator.selection.results import FederatedSelectionResult
 from coordinator.training.protocol import TrainingResult
 from shared.protocol import (
@@ -63,5 +65,10 @@ class ExperimentOutcome(_Outcome):
     training: TrainingResult | None = None
     training_s: float = 0.0
     """Wall-clock time of the whole training phase, rounds included."""
+    harmonization: HarmonizationResult | None = None
+    harmonization_s: float = 0.0
+    evaluation: EvaluationResult | None = None
+    evaluation_s: float = 0.0
+    """Including external validation (which re-runs selection and training)."""
     total_bytes: int
     duration_s: float

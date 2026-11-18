@@ -10,6 +10,7 @@ from importlib import metadata
 
 from client.data import LocalDataset, LocalDataSource
 from client.egress import EgressGuard
+from client.harmonize import LocalStateUpdate, SiteHarmonizer
 from client.splits import partition
 from client.tasks import LocalTask, TaskRefused, default_tasks
 from shared.costs import CostTracker
@@ -54,6 +55,7 @@ class FederatedClient:
         self._data_source = data_source
         self._tasks = tasks if tasks is not None else default_tasks()
         self._dataset: LocalDataset | None = None
+        self._harmonizer: SiteHarmonizer | None = None
         self._guard: EgressGuard | None = None
         self._registered = False
         self._log = get_logger("client").bind(client_id=client_id, experiment_id=experiment_id)
@@ -134,4 +136,18 @@ class FederatedClient:
         task = self._tasks.get(config.task)
         if task is None:
             raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
-        return task.run(partition(self._dataset, config.partition), config)
+        harmonization_round = config.task in {
+            TaskKind.HARMONIZATION_STATISTICS,
+            TaskKind.HARMONIZATION_VARIANCE,
+            TaskKind.HARMONIZATION_APPLY,
+        }
+        dataset = self._dataset
+        if self._harmonizer is not None and not harmonization_round:
+            dataset = self._harmonizer.apply(dataset)
+        if not getattr(task, "needs_full_dataset", False):
+            dataset = partition(dataset, config.partition)
+        result = task.run(dataset, config)
+        if isinstance(result, LocalStateUpdate):
+            self._harmonizer = result.harmonizer
+            return result.payload
+        return result

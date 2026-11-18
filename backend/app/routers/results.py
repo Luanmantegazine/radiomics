@@ -5,7 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.deps import get_session
-from backend.app.models import CostRecord, FeatureSelectionRecord, SelectedFeatureRecord
+from backend.app.models import (
+    CostRecord,
+    EvaluationRecord,
+    FeatureSelectionRecord,
+    HarmonizationRecord,
+    SelectedFeatureRecord,
+)
 from backend.app.schemas import CostOut, ResultsOut, RoundResult, SelectedFeatureOut
 from backend.app.services import experiments as service
 
@@ -63,6 +69,45 @@ def get_selected_features(
     return list(
         session.scalars(query.order_by(SelectedFeatureRecord.strategy, SelectedFeatureRecord.rank))
     )
+
+
+@router.get("/{experiment_id}/harmonization")
+def get_harmonization(experiment_id: str, session: Session = Depends(get_session)) -> dict:
+    """Site effects before/after harmonization and clinical differences between sites."""
+    experiment = _experiment_or_404(session, experiment_id)
+    record = session.scalar(
+        select(HarmonizationRecord).where(HarmonizationRecord.experiment_id == experiment_id)
+    )
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no harmonization for this experiment")
+    return {"experiment_id": experiment_id, "data_origin": experiment.data_origin,
+            **record.result}
+
+
+@router.get("/{experiment_id}/evaluation")
+def get_evaluation(
+    experiment_id: str,
+    model_name: str | None = None,
+    scope: str | None = None,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Pooled (site-stratified) metrics per model, variant and scope."""
+    experiment = _experiment_or_404(session, experiment_id)
+    query = select(EvaluationRecord).where(EvaluationRecord.experiment_id == experiment_id)
+    if model_name:
+        query = query.where(EvaluationRecord.model_name == model_name)
+    if scope:
+        query = query.where(EvaluationRecord.scope == scope)
+    rows = session.scalars(query.order_by(EvaluationRecord.id)).all()
+    return {
+        "experiment_id": experiment_id,
+        "data_origin": experiment.data_origin,
+        "evaluations": [
+            {"model_name": r.model_name, "variant": r.variant, "scope": r.scope,
+             "n_clients": r.n_clients, **r.metrics}
+            for r in rows
+        ],
+    }
 
 
 @router.get("/{experiment_id}/costs", response_model=list[CostOut])

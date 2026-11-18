@@ -7,6 +7,11 @@ from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from coordinator.aggregation import AggregationError, get_strategy
+from coordinator.evaluation.protocol import EvaluationResult, FederatedEvaluationProtocol
+from coordinator.harmonization.protocol import (
+    FederatedHarmonizationProtocol,
+    HarmonizationResult,
+)
 from coordinator.ingress import IngressRejected, validate_update
 from coordinator.outcomes import ClientRoundOutcome, ExperimentOutcome, RoundOutcome
 from coordinator.ports import NullRecorder, RunRecorder
@@ -19,8 +24,10 @@ from shared.logging import get_logger
 from shared.protocol import (
     ClientRegistration,
     ClientUpdate,
+    EvaluationRequest,
     FeatureInventoryAggregate,
     FederatedPhase,
+    HarmonizationState,
     ModelState,
     PartitionSpec,
     ReasonCode,
@@ -127,7 +134,9 @@ class FederatedCoordinator:
         rounds: list[RoundOutcome] = []
         selection: FederatedSelectionResult | None = None
         training: TrainingResult | None = None
-        selection_s = training_s = 0.0
+        harmonization: HarmonizationResult | None = None
+        evaluation: EvaluationResult | None = None
+        selection_s = training_s = harmonization_s = evaluation_s = 0.0
         completed = len(registered) >= self._config.privacy.min_clients_per_aggregate
         if not completed:
             self._log.error("not_enough_clients", registered=len(registered))
@@ -143,12 +152,20 @@ class FederatedCoordinator:
                 if not outcome.completed:
                     completed = False
                     break
+            if completed and self._config.harmonization is not None:
+                started_h = time.perf_counter()
+                completed, harmonization = self._run_harmonization(rounds, registered)
+                harmonization_s = time.perf_counter() - started_h
             if completed and self._config.feature_selection is not None:
                 completed, selection, selection_s = self._run_selection(rounds, registered)
             if completed and self._config.training is not None:
                 completed, training, training_s = self._run_training(
                     rounds, registered, selection
                 )
+            if completed and self._config.evaluation is not None and training is not None:
+                started_e = time.perf_counter()
+                evaluation = self._run_evaluation(rounds, registered, training)
+                evaluation_s = time.perf_counter() - started_e
         result = ExperimentOutcome(
             experiment_id=self._experiment_id,
             completed=completed,
@@ -158,6 +175,10 @@ class FederatedCoordinator:
             selection_s=selection_s,
             training=training,
             training_s=training_s,
+            harmonization=harmonization,
+            harmonization_s=harmonization_s,
+            evaluation=evaluation,
+            evaluation_s=evaluation_s,
             total_bytes=sum(c.bytes_sent + c.bytes_received for r in rounds for c in r.clients),
             duration_s=time.perf_counter() - started,
         )
@@ -186,6 +207,69 @@ class FederatedCoordinator:
         )
         self._recorder.selection_finished(self._experiment_id, selection)
         return True, selection, duration
+
+    def _run_harmonization(
+        self, rounds: list[RoundOutcome], clients: tuple[str, ...]
+    ) -> tuple[bool, HarmonizationResult | None]:
+        protocol = FederatedHarmonizationProtocol(
+            self._config.harmonization, self._config.privacy, self._feature_names
+        )
+        try:
+            if not self._drive(protocol, rounds, clients):
+                return False, None
+        except AggregationError as exc:
+            self._log.error("harmonization_failed", reason=str(exc))
+            return False, None
+        self._feature_names = protocol.schema
+        result = protocol.result()
+        self._recorder.harmonization_finished(self._experiment_id, result)
+        return True, result
+
+    def _run_evaluation(
+        self, rounds: list[RoundOutcome], clients: tuple[str, ...], training: TrainingResult
+    ) -> EvaluationResult:
+        config = self._config.evaluation
+        protocol = FederatedEvaluationProtocol(config, self._config.training, training.models)
+        self._drive(protocol, rounds, clients)
+        evaluations = list(protocol.result().evaluations)
+        if config.external_validation == "leave_one_site_out":
+            evaluations += self._external_validation(rounds, clients)
+        result = EvaluationResult(evaluations=tuple(evaluations))
+        self._recorder.evaluation_finished(self._experiment_id, result)
+        return result
+
+    def _external_validation(self, rounds: list[RoundOutcome], clients: tuple[str, ...]):
+        """Re-run selection and training without each site, evaluate on that site.
+
+        Harmonization is not re-estimated per fold (it uses no outcome; see docs).
+        """
+        out = []
+        for held_out in clients:
+            subset = tuple(c for c in clients if c != held_out)
+            if len(subset) < self._config.privacy.min_clients_per_aggregate:
+                self._log.warning("external_validation_skipped", held_out=held_out)
+                continue
+            selection = None
+            if self._config.feature_selection is not None:
+                selection_protocol = FederatedSelectionProtocol(
+                    self._config.feature_selection, self._config.privacy, self._feature_names
+                )
+                if not self._drive(selection_protocol, rounds, subset):
+                    continue
+                try:
+                    selection = selection_protocol.result()
+                except AggregationError:
+                    continue
+            training_protocol = FederatedTrainingProtocol(self._config.training, selection)
+            self._drive(training_protocol, rounds, subset)
+            protocol = FederatedEvaluationProtocol(
+                self._config.evaluation, self._config.training,
+                training_protocol.result().models, scope=f"external:{held_out}",
+                clients=(held_out,), variants=("released",), evaluation_partition="all",
+            )
+            self._drive(protocol, rounds, subset)
+            out.extend(protocol.result().evaluations)
+        return out
 
     def _run_training(
         self,
@@ -228,6 +312,10 @@ class FederatedCoordinator:
                 feature_names=request.feature_names,
                 partition=self._partition(),
                 model=request.model,
+                harmonization=request.harmonization,
+                evaluation=request.evaluation,
+                min_clients=request.min_clients,
+                round_clients=request.clients,
             )
             rounds.append(outcome)
             self._recorder.round_finished(outcome)
@@ -264,7 +352,13 @@ class FederatedCoordinator:
         feature_names: tuple[str, ...] | None = None,
         partition: PartitionSpec | None = None,
         model: ModelState | None = None,
+        harmonization: HarmonizationState | None = None,
+        evaluation: EvaluationRequest | None = None,
+        min_clients: int | None = None,
+        round_clients: tuple[str, ...] | None = None,
     ) -> RoundOutcome:
+        if round_clients is not None:
+            clients = round_clients
         started = time.perf_counter()
         config = RoundConfig(
             protocol_version=self._config.protocol_version,
@@ -280,6 +374,8 @@ class FederatedCoordinator:
             params=params,
             partition=partition,
             model=model,
+            harmonization=harmonization,
+            evaluation=evaluation,
         )
         raw_config = encode(config)
         log = self._log.bind(round_id=config.round_id, task=task.value)
@@ -325,7 +421,8 @@ class FederatedCoordinator:
             )
 
         aggregate, failure, aggregation_s = None, None, 0.0
-        if len(accepted) < self._config.privacy.min_clients_per_aggregate:
+        required = min_clients or self._config.privacy.min_clients_per_aggregate
+        if len(accepted) < required:
             failure = "too_few_valid_updates"
         else:
             agg_started = time.perf_counter()

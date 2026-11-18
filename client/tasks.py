@@ -21,6 +21,11 @@ from shared.protocol import (
     FeatureRelevancePayload,
     FeatureReliabilityPayload,
     FeatureSummaryPayload,
+    HarmonizationApplyPayload,
+    HarmonizationStatisticsPayload,
+    HarmonizationVariancePayload,
+    HorizonEvaluation,
+    ModelEvaluationPayload,
     ModelState,
     ModelUpdatePayload,
     ReasonCode,
@@ -293,6 +298,209 @@ class SiteInterceptTask:
         )
 
 
+# --------------------------------------------------------------------------- #
+# Harmonization (ComBat)
+# --------------------------------------------------------------------------- #
+def _harmonization_inputs(dataset: LocalDataset, config: RoundConfig):
+    from client.harmonize import columns
+
+    state = config.harmonization
+    if state is None or not config.feature_names:
+        raise TaskRefused(ReasonCode.MISSING_FEATURES)
+    if dataset.n_participants < config.privacy.min_cohort_size:
+        raise DisclosureViolation(ReasonCode.COHORT_TOO_SMALL, "local cohort below threshold")
+    try:
+        y = columns(dataset, config.feature_names)
+        x = columns(dataset, state.covariates)
+    except KeyError:
+        raise TaskRefused(ReasonCode.MISSING_FEATURES) from None
+    return state, y, x
+
+
+def _global_combat(state, p: int):
+    from harmonization.combat import GlobalCombat
+
+    c = len(state.covariates)
+    return GlobalCombat(
+        grand_mean=np.array(state.grand_mean),
+        beta=np.array(state.beta).reshape(c, p),
+        var_pooled=np.array(state.var_pooled),
+    )
+
+
+class HarmonizationStatisticsTask:
+    """Sums for the ComBat regression, plus the site's cohort profile."""
+
+    kind = TaskKind.HARMONIZATION_STATISTICS
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> HarmonizationStatisticsPayload:
+        from evaluation.censoring import censoring_survival
+        from harmonization.combat import site_sums
+
+        state, y, x = _harmonization_inputs(dataset, config)
+        sums = site_sums(y, x)
+        times, values = censoring_survival(dataset.time_months, dataset.event)
+        reached = np.flatnonzero(values <= 0.5)
+        return HarmonizationStatisticsPayload(
+            feature_names=config.feature_names,
+            covariate_names=state.covariates,
+            n_samples=sums.n,
+            n_converted=int(dataset.event.sum()),
+            median_follow_up=float(times[reached[0]]) if reached.size else None,
+            sum_x=tuple(sums.sum_x.tolist()),
+            sum_xx_upper=_upper(sums.sum_xx) if sums.sum_xx.size else (),
+            sum_y=tuple(sums.sum_y.tolist()),
+            sum_yy=tuple(sums.sum_yy.tolist()),
+            sum_xy=tuple(sums.sum_xy.ravel().tolist()),
+        )
+
+
+class HarmonizationVarianceTask:
+    kind = TaskKind.HARMONIZATION_VARIANCE
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> HarmonizationVariancePayload:
+        from harmonization.combat import residual_sum_of_squares
+
+        state, y, x = _harmonization_inputs(dataset, config)
+        beta = np.array(state.beta).reshape(len(state.covariates), y.shape[1])
+        return HarmonizationVariancePayload(
+            feature_names=config.feature_names,
+            n_samples=len(y),
+            residual_ss=tuple(residual_sum_of_squares(y, x, beta).tolist()),
+        )
+
+
+class HarmonizationApplyTask:
+    """Estimate the site's own ComBat adjustment and install it locally."""
+
+    kind = TaskKind.HARMONIZATION_APPLY
+
+    def run(self, dataset: LocalDataset, config: RoundConfig):
+        from client.harmonize import LocalStateUpdate, SiteHarmonizer
+        from harmonization.combat import fit_site
+
+        state, y, x = _harmonization_inputs(dataset, config)
+        model = fit_site(y, x, _global_combat(state, y.shape[1]),
+                         empirical_bayes=state.empirical_bayes, tolerance=state.eb_tolerance)
+        adjusted = model.apply(y, x)
+        return LocalStateUpdate(
+            payload=HarmonizationApplyPayload(
+                feature_names=config.feature_names,
+                n_samples=len(y),
+                sum_y=tuple(adjusted.sum(0).tolist()),
+                sum_yy=tuple((adjusted**2).sum(0).tolist()),
+            ),
+            harmonizer=SiteHarmonizer(config.feature_names, state.covariates, model),
+        )
+
+
+# --------------------------------------------------------------------------- #
+# Evaluation
+# --------------------------------------------------------------------------- #
+class ModelEvaluationTask:
+    """Evaluate a model on the site's evaluation partition (sums only).
+
+    Receives the full local dataset: the ``site_baseline`` and ``local``
+    variants estimate site quantities on the training partition and evaluate
+    on the held-out one.
+    """
+
+    kind = TaskKind.MODEL_EVALUATION
+    needs_full_dataset = True
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> ModelEvaluationPayload:
+        from client.models import cox, logistic
+        from client.models.prediction import predict_conversion
+        from client.splits import partition
+        from evaluation.metrics import horizon_statistics, merge_bins
+        from shared.models import CoxModel
+        from shared.newton import NewtonSettings
+        from shared.protocol import PartitionSpec
+        from shared.training import CoxSpec
+
+        request = config.evaluation
+        if request is None:
+            raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
+        split = config.partition
+        if request.evaluation_partition == "test":
+            if split is None:
+                raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
+            evaluated = partition(dataset, PartitionSpec(
+                name="test", test_fraction=split.test_fraction, seed=split.seed))
+            train = partition(dataset, PartitionSpec(
+                name="train", test_fraction=split.test_fraction, seed=split.seed))
+        else:
+            evaluated, train = dataset, dataset
+        n_events = int(evaluated.event.sum())
+        if evaluated.n_participants < config.privacy.min_cohort_size:
+            raise DisclosureViolation(ReasonCode.COHORT_TOO_SMALL, "evaluation set too small")
+        if n_events < config.privacy.min_events:
+            raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "too few events to evaluate")
+
+        model = request.model
+        names = model.feature_names
+        try:
+            x_train = train.features[:, [train.feature_names.index(n) for n in names]]
+        except ValueError:
+            raise TaskRefused(ReasonCode.MISSING_FEATURES) from None
+        z_train = (x_train - np.array(model.center)) / np.array(model.scale)
+        if request.variant == "site_baseline":
+            if isinstance(model, CoxModel):
+                model = model.model_copy(update={"baseline_cumulative_hazard":
+                    cox.breslow_cumulative_hazard(z_train, train.time_months, train.event,
+                                                  np.array(model.coefficients),
+                                                  model.horizons_months)})
+            else:
+                fits = []
+                for fit in model.horizons:
+                    y, w = logistic.horizon_labels(train.time_months, train.event,
+                                                   fit.horizon_months, model.censoring)
+                    fits.append(fit.model_copy(update={"intercept": logistic.profile_intercept(
+                        z_train, y, w, np.array(fit.coefficients))}))
+                model = model.model_copy(update={"horizons": tuple(fits)})
+        elif request.variant == "local":
+            spec = request.model_spec
+            o = spec.optimizer
+            settings = NewtonSettings(o.ridge, o.max_iterations, o.tolerance)
+            horizons = (model.horizons_months if isinstance(model, CoxModel)
+                        else tuple(f.horizon_months for f in model.horizons))
+            try:
+                if isinstance(spec, CoxSpec):
+                    model = cox.fit_cox(names, x_train, train.time_months, train.event,
+                                        settings, horizons, min_events=config.privacy.min_events)
+                else:
+                    model = logistic.fit_horizon_logistic(
+                        names, x_train, train.time_months, train.event, horizons,
+                        spec.censoring, settings, min_events=config.privacy.min_events)
+            except ValueError:
+                raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "local fit failed") from None
+
+        horizons, probabilities = predict_conversion(model, evaluated.feature_names,
+                                                     evaluated.features)
+        grid = np.array(request.grid)
+        entries = []
+        for j, horizon in enumerate(horizons):
+            p = probabilities[:, j]
+            if not np.isfinite(p).all():
+                entries.append(HorizonEvaluation(horizon_months=horizon, available=False))
+                continue
+            stats = merge_bins(
+                horizon_statistics(evaluated.time_months, evaluated.event, p, horizon, grid),
+                config.privacy.min_cohort_size,
+            )
+            entries.append(HorizonEvaluation(
+                horizon_months=horizon, available=True, n=stats.n, n_events=stats.n_events,
+                weight_sum=stats.weight_sum, weighted_events=stats.weighted_events,
+                brier_sum=stats.brier_sum, auc_num=stats.auc_num, auc_den=stats.auc_den,
+                c_num=stats.c_num, c_den=stats.c_den, edges=stats.edges,
+                bin_n=tuple(stats.bin_n.tolist()), bin_w=tuple(stats.bin_w.tolist()),
+                bin_wy=tuple(stats.bin_wy.tolist()), bin_wp=tuple(stats.bin_wp.tolist()),
+            ))
+        return ModelEvaluationPayload(
+            n_samples=evaluated.n_participants, n_events=n_events, horizons=tuple(entries)
+        )
+
+
 def default_tasks() -> dict[TaskKind, LocalTask]:
     tasks: list[LocalTask] = [
         FeatureInventoryTask(),
@@ -303,5 +511,9 @@ def default_tasks() -> dict[TaskKind, LocalTask]:
         ModelUpdateTask(),
         BaselineHazardTask(),
         SiteInterceptTask(),
+        HarmonizationStatisticsTask(),
+        HarmonizationVarianceTask(),
+        HarmonizationApplyTask(),
+        ModelEvaluationTask(),
     ]
     return {task.kind: task for task in tasks}

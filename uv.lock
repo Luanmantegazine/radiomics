@@ -273,6 +273,7 @@ backend = [
 ]
 dev = [
     { name = "httpx" },
+    { name = "neurocombat" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -298,6 +299,7 @@ requires-dist = [
     { name = "flwr", marker = "extra == 'flower'", specifier = ">=1.10,<2" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1" },
     { name = "mlflow-skinny", marker = "extra == 'backend'", specifier = ">=2.16,<4" },
+    { name = "neurocombat", marker = "extra == 'dev'", specifier = ">=0.2.12,<0.3" },
     { name = "nibabel", marker = "extra == 'imaging'", specifier = ">=5.0,<6" },
     { name = "numpy", specifier = ">=1.26.4,<2" },
     { name = "pandas", marker = "extra == 'imaging'", specifier = ">=2.0,<3" },
@@ -638,6 +640,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/9c/c3/8b98f8171346c42ea
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b9/02/9062e57d6f78ac150c53c8e970275d1e9f4b57aeb11abdb9a24bcb43b10e/mlflow_skinny-3.18.0-py3-none-any.whl", hash = "sha256:93715e152061e0ecabcc9aa70330b296141a806de9da6b2c29cff8703b00608f", size = 4421618, upload-time = "2026-11-03T23:32:43.463Z" },
 ]
+
+[[package]]
+name = "neurocombat"
+version = "0.2.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/e4/ca7af7aaf09b34702ef1f2a5e6afd5105b89c01a09f323ac60af429ef8b4/neuroCombat-0.2.12.tar.gz", hash = "sha256:dfba419ec1a251f4142a3705a1567e5a3b9589dc39ca93a57669cda09c954caa", size = 6191, upload-time = "2021-05-18T16:25:17.511Z" }
 
 [[package]]
 name = "nibabel"

@@ -263,3 +263,30 @@ def test_federated_models_through_the_api(api, settings):
             {t: connection.execute(f"SELECT * FROM {t}").fetchall() for t in tables}, default=str
         )
     assert per_site and not any(repr(v) in stored for v in per_site if v is not None)
+
+
+def test_harmonization_and_evaluation_through_the_api(api, settings):
+    from shared.config import load_experiment_config
+    from tests.federated.test_harmonization import STAGE6
+
+    config = load_experiment_config(STAGE6)
+    experiment_id = api.post("/experiments", json=config.model_dump(mode="json")).json()["id"]
+    assert api.post(f"/experiments/{experiment_id}/run").status_code == 202
+    assert api.get(f"/experiments/{experiment_id}").json()["status"] == "completed"
+
+    harmonization = api.get(f"/results/{experiment_id}/harmonization").json()
+    assert harmonization["method"] == "combat" and harmonization["data_origin"] == "synthetic"
+    assert harmonization["site_effect_after"]["max_eta_squared"] < 0.01
+    evaluation = api.get(f"/results/{experiment_id}/evaluation",
+                         params={"scope": "internal"}).json()["evaluations"]
+    assert {(e["model_name"], e["variant"]) for e in evaluation} >= {
+        ("cox_selected", "released"), ("cox_selected", "local"),
+    }
+    first = evaluation[0]
+    assert len(first["pooled"]) == 3 and first["pooled"][0]["auc"] is not None
+    external = api.get(f"/results/{experiment_id}/evaluation",
+                       params={"scope": "external:client-02"}).json()["evaluations"]
+    assert external and all(e["n_clients"] == 1 for e in external)
+    costs = {c["metric"] for c in api.get(f"/results/{experiment_id}/costs").json()}
+    assert {"harmonization_time", "evaluation_time"} <= costs
+    assert api.get("/results/exp-missing/harmonization").status_code == 404

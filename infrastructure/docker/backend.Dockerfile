@@ -16,6 +16,7 @@ COPY client ./client
 COPY coordinator ./coordinator
 COPY backend ./backend
 COPY evaluation ./evaluation
+COPY harmonization ./harmonization
 COPY experiments ./experiments
 
 RUN useradd --create-home app && mkdir -p /app/var && chown -R app /app/var

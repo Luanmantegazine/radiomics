@@ -8,16 +8,19 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPONENTS = {"shared", "client", "coordinator", "backend", "evaluation", "experiments"}
+COMPONENTS = {
+    "shared", "client", "coordinator", "backend", "evaluation", "experiments", "harmonization",
+}
 
 #: component -> components it is allowed to import
 ALLOWED = {
     "shared": set(),
-    "client": {"shared", "evaluation"},
-    "coordinator": {"shared", "evaluation"},
+    "client": {"shared", "evaluation", "harmonization"},
+    "coordinator": {"shared", "evaluation", "harmonization"},
     "evaluation": {"shared"},
+    "harmonization": {"shared"},
     "backend": {"shared", "coordinator"},
-    "experiments": {"shared", "client", "coordinator", "backend", "evaluation"},
+    "experiments": {"shared", "client", "coordinator", "backend", "evaluation", "harmonization"},
 }
 #: scientific / image libraries that must never be imported by the backend
 SCIENTIFIC = {"radiomics", "SimpleITK", "sksurv", "sklearn", "torch", "scipy", "nibabel", "numpy"}
@@ -59,7 +62,7 @@ def test_persistence_stays_out_of_clients_and_coordinator():
 def test_imaging_stack_is_confined_to_the_client():
     """Images are read only inside a site; no other component can open them."""
     imaging = {"radiomics", "SimpleITK", "nibabel", "pandas"}
-    for package in ("shared", "coordinator", "backend", "evaluation"):
+    for package in ("shared", "coordinator", "backend", "evaluation", "harmonization"):
         assert not [(p, t) for p, t in _imports(package) if t in imaging]
 
 
@@ -73,5 +76,5 @@ def test_imaging_pipeline_has_no_network_or_transport_dependency():
 def test_coordinator_aggregation_needs_only_numpy():
     """The coordinator runs where the backend runs; it must not need the science stack."""
     heavy = {"scipy", "sksurv", "sklearn", "radiomics", "SimpleITK", "pandas", "torch"}
-    for package in ("coordinator", "evaluation"):
+    for package in ("coordinator", "evaluation", "harmonization"):
         assert not [(p, t) for p, t in _imports(package) if t in heavy]

@@ -29,6 +29,11 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument("--config", help="YAML experiment configuration to register and run")
     source.add_argument("--experiment-id", help="run an experiment already registered in the DB")
     parser.add_argument("--log-level", default=None)
+    parser.add_argument(
+        "--centralized-reference", metavar="AUTHORIZATION",
+        help="also pool the simulated sites' data for a centralized reference; requires an "
+             "explicit authorization statement, which is recorded with the result",
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -79,12 +84,25 @@ def main(argv: list[str] | None = None) -> int:
             }
             for strategy in outcome.feature_selection.strategies
         },
+        "evaluation": None
+        if outcome.evaluation is None
+        else [
+            {"model": e.model_name, "variant": e.variant, "scope": e.scope,
+             "auc": [h.auc for h in e.pooled], "c_index": [h.c_index for h in e.pooled]}
+            for e in outcome.evaluation.evaluations
+        ],
         "training": None
         if outcome.training is None
         else {model.name: model.status for model in outcome.training.models},
         "total_bytes": outcome.total_bytes,
         "duration_s": round(outcome.duration_s, 4),
     }
+    if args.centralized_reference:
+        from experiments.centralized import centralized_reference
+
+        summary["centralized_reference"] = centralized_reference(
+            config, outcome, args.centralized_reference
+        )
     json.dump(summary, sys.stdout, indent=2)
     sys.stdout.write("\n")
     return 0 if outcome.completed else 1

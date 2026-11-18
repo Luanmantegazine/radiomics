@@ -12,15 +12,19 @@ from sqlalchemy.orm import Session, sessionmaker
 from backend.app.models import (
     ClientRecord,
     CostRecord,
+    EvaluationRecord,
     Experiment,
     FeatureSelectionRecord,
     FederatedRound,
+    HarmonizationRecord,
     ModelRecord,
     RoundParticipation,
     SelectedFeatureRecord,
     utcnow,
 )
 from backend.app.tracking import ExperimentTracker
+from coordinator.evaluation.protocol import EvaluationResult
+from coordinator.harmonization.protocol import HarmonizationResult
 from coordinator.outcomes import ExperimentOutcome, RoundOutcome
 from coordinator.selection.results import FederatedSelectionResult
 from coordinator.training.protocol import TrainingResult
@@ -229,6 +233,43 @@ class DatabaseRunRecorder:
             session.commit()
         self._tracker.log_metrics(self._run_id, metrics, step=0)
 
+    def harmonization_finished(self, experiment_id: str, result: HarmonizationResult) -> None:
+        with self._sessions() as session:
+            session.add(HarmonizationRecord(experiment_id=self._experiment_id,
+                                            result=result.model_dump(mode="json")))
+            session.commit()
+        metrics = {}
+        for stage in ("site_effect_before", "site_effect_after"):
+            summary = getattr(result, stage) or {}
+            if summary.get("median_eta_squared") is not None:
+                metrics[f"harmonization.{stage}.median_eta_squared"] = summary[
+                    "median_eta_squared"]
+        self._tracker.log_metrics(self._run_id, metrics, step=0)
+        self._tracker.log_dict(self._run_id, result.model_dump(mode="json"),
+                               "harmonization.json")
+
+    def evaluation_finished(self, experiment_id: str, result: EvaluationResult) -> None:
+        metrics: dict[str, float] = {}
+        with self._sessions() as session:
+            for evaluation in result.evaluations:
+                data = evaluation.model_dump(mode="json")
+                session.add(EvaluationRecord(
+                    experiment_id=self._experiment_id, model_name=evaluation.model_name,
+                    variant=evaluation.variant, scope=evaluation.scope,
+                    n_clients=evaluation.n_clients,
+                    metrics={k: data[k] for k in ("pooled", "sites", "feature_names")},
+                ))
+                prefix = f"eval.{evaluation.scope}.{evaluation.model_name}.{evaluation.variant}"
+                for horizon in evaluation.pooled:
+                    for name in ("auc", "c_index", "brier", "scaled_brier", "o_e"):
+                        value = getattr(horizon, name)
+                        if value is not None:
+                            key = f"{prefix}.h{horizon.horizon_months:g}.{name}"
+                            metrics[key.replace(":", "_")] = value
+            session.commit()
+        self._tracker.log_metrics(self._run_id, metrics, step=0)
+        self._tracker.log_dict(self._run_id, result.model_dump(mode="json"), "evaluation.json")
+
     def _config(self) -> dict:
         with self._sessions() as session:
             return session.get_one(Experiment, self._experiment_id).config
@@ -255,6 +296,11 @@ class DatabaseRunRecorder:
                                metric="selection_time", value=outcome.selection_s, unit="s"),
                     CostRecord(experiment_id=self._experiment_id, scope="experiment",
                                metric="training_time", value=outcome.training_s, unit="s"),
+                    CostRecord(experiment_id=self._experiment_id, scope="experiment",
+                               metric="harmonization_time", value=outcome.harmonization_s,
+                               unit="s"),
+                    CostRecord(experiment_id=self._experiment_id, scope="experiment",
+                               metric="evaluation_time", value=outcome.evaluation_s, unit="s"),
                 ]
             )
             session.commit()
