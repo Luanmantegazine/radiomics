@@ -10,6 +10,7 @@ from typing import Protocol
 
 from coordinator.outcomes import ExperimentOutcome, RoundOutcome
 from coordinator.selection.results import FederatedSelectionResult
+from coordinator.training.protocol import TrainingResult
 from shared.protocol import ClientRegistration, ReasonCode
 
 
@@ -23,6 +24,8 @@ class RunRecorder(Protocol):
     def round_finished(self, outcome: RoundOutcome) -> None: ...
 
     def selection_finished(self, experiment_id: str, result: FederatedSelectionResult) -> None: ...
+
+    def training_finished(self, experiment_id: str, result: TrainingResult) -> None: ...
 
     def experiment_finished(self, outcome: ExperimentOutcome) -> None: ...
 
@@ -42,6 +45,9 @@ class NullRecorder:
         return None
 
     def selection_finished(self, experiment_id: str, result: FederatedSelectionResult) -> None:
+        return None
+
+    def training_finished(self, experiment_id: str, result: TrainingResult) -> None:
         return None
 
     def experiment_finished(self, outcome: ExperimentOutcome) -> None:

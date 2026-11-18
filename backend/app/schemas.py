@@ -108,5 +108,13 @@ class ModelOut(ApiModel):
     experiment_id: str
     name: str
     kind: str
+    status: str
+    failure_reason: str | None
+    features_source: str
+    feature_names: list[str]
     mlflow_model_uri: str | None
     created_at: datetime
+
+
+class ModelDetail(ModelOut):
+    parameters: dict[str, Any] | None

@@ -141,13 +141,23 @@ class SelectedFeatureRecord(Base):
 
 
 class ModelRecord(Base):
-    """Registered model version (populated from Stage 5 onwards)."""
+    """A trained (or failed) model of an experiment.
+
+    ``parameters`` is the released model: global coefficients, standardisation,
+    pooled baseline and fit diagnostics - no per-site quantity.
+    """
 
     __tablename__ = "models"
+    __table_args__ = (UniqueConstraint("experiment_id", "name"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     experiment_id: Mapped[str] = mapped_column(ForeignKey("experiments.id"), index=True)
     name: Mapped[str] = mapped_column(String(64))
     kind: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    features_source: Mapped[str] = mapped_column(String(96))
+    feature_names: Mapped[list[str]] = mapped_column(JSON, default=list)
+    parameters: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     mlflow_model_uri: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

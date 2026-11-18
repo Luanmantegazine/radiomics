@@ -52,6 +52,7 @@ from shared.protocol import (
     FeatureReliabilityAggregate,
     FeatureReliabilityPayload,
     FederatedPhase,
+    ModelState,
     PrivacyPolicy,
     TaskKind,
     WireModel,
@@ -61,11 +62,14 @@ from shared.selection import FederatedSelectionConfig
 
 @dataclass(frozen=True, slots=True)
 class RoundRequest:
+    """One communication round requested by a protocol (selection or training)."""
+
     phase: FederatedPhase
     task: TaskKind
     feature_names: tuple[str, ...] | None
     params: dict
     aggregator: str
+    model: ModelState | None = None
 
 
 def _optional(values: np.ndarray) -> tuple[float | None, ...]:
@@ -119,6 +123,10 @@ class FederatedSelectionProtocol:
                 "pooled_within_site_correlation",
             )
         return None
+
+    def on_round_failed(self, request: RoundRequest, reason: str) -> bool:
+        """Every selection round is required: a failure stops the selection."""
+        return False
 
     def aggregate(self, request: RoundRequest, updates: Sequence[ClientUpdate]) -> WireModel:
         """Combine the accepted updates of a round (engine already checked the count)."""

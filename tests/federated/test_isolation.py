@@ -113,7 +113,8 @@ def test_no_message_carries_a_per_participant_array(run):
     for record in transport.log.records:
         for array in _arrays(json.loads(record.raw)):
             assert len(array) not in cohort_sizes
-            assert len(array) <= max_features
+            if any(isinstance(v, int | float) and not isinstance(v, bool) for v in array):
+                assert len(array) <= max_features  # numeric arrays are feature-indexed
 
 
 def test_messages_contain_only_allowlisted_fields(run):

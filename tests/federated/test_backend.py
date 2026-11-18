@@ -210,3 +210,56 @@ def test_federated_selection_through_the_api(api, settings):
     assert not any(repr(v) in stored for v in per_site)
     assert "SYN-" not in stored
     assert api.get("/results/exp-missing/feature-selection").status_code == 404
+
+
+def test_federated_models_through_the_api(api, settings):
+    """Stage 5: trained models are stored and served; per-site baselines are not."""
+    import numpy as np
+
+    from client.models.cox import breslow_cumulative_hazard
+    from client.splits import partition
+    from experiments.simulation import build_clients
+    from shared.config import load_experiment_config
+    from shared.protocol import PartitionSpec
+    from tests.federated.test_federated_training import STAGE5
+
+    config = load_experiment_config(STAGE5)
+    experiment_id = api.post("/experiments", json=config.model_dump(mode="json")).json()["id"]
+    assert api.post(f"/experiments/{experiment_id}/run").status_code == 202
+    assert api.get(f"/experiments/{experiment_id}").json()["status"] == "completed"
+
+    models = api.get("/models", params={"experiment_id": experiment_id}).json()
+    assert {m["name"]: m["status"] for m in models} == {
+        "cox_selected": "trained", "cox_relevance_only": "trained",
+        "logistic_ipcw_site": "trained", "logistic_ipcw_common": "trained",
+        "logistic_complete_case_site": "trained", "cox_reference": "trained",
+    }
+    cox = next(m for m in models if m["name"] == "cox_reference")
+    assert cox["features_source"] == "explicit"
+    assert cox["feature_names"] == ["feat_strong", "feat_moderate"]
+    detail = api.get(f"/models/{cox['id']}").json()
+    parameters = detail["parameters"]
+    assert parameters["kind"] == "cox" and parameters["baseline"] == "pooled_sites"
+    assert len(parameters["baseline_cumulative_hazard"]) == 3
+    assert parameters["fit"]["converged"] and parameters["fit"]["n_clients"] == 3
+    assert api.get("/models/999999").status_code == 404
+    costs = {c["metric"] for c in api.get(f"/results/{experiment_id}/costs").json()}
+    assert "training_time" in costs
+
+    split = PartitionSpec(name="train", test_fraction=0.3, seed=7)
+    per_site = set()
+    for client in build_clients(experiment_id, config):
+        d = partition(client._data_source.load(), split)
+        x = d.features[:, [d.feature_names.index(n) for n in parameters["feature_names"]]]
+        z = (x - np.array(parameters["center"])) / np.array(parameters["scale"])
+        per_site.update(breslow_cumulative_hazard(
+            z, d.time_months, d.event, np.array(parameters["coefficients"]), (12.0, 24.0, 36.0)
+        ))
+    db_path = settings.database_url.removeprefix("sqlite:///")
+    with sqlite3.connect(db_path) as connection:
+        tables = [r[0] for r in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")]
+        stored = json.dumps(
+            {t: connection.execute(f"SELECT * FROM {t}").fetchall() for t in tables}, default=str
+        )
+    assert per_site and not any(repr(v) in stored for v in per_site if v is not None)

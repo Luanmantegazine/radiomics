@@ -5,6 +5,7 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from coordinator.selection.results import FederatedSelectionResult
+from coordinator.training.protocol import TrainingResult
 from shared.protocol import (
     CostReport,
     FederatedPhase,
@@ -59,5 +60,8 @@ class ExperimentOutcome(_Outcome):
     feature_selection: FederatedSelectionResult | None = None
     selection_s: float = 0.0
     """Coordinator time spent evaluating the selection strategies (after the rounds)."""
+    training: TrainingResult | None = None
+    training_s: float = 0.0
+    """Wall-clock time of the whole training phase, rounds included."""
     total_bytes: int
     duration_s: float

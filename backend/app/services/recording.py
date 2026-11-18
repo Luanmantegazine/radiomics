@@ -15,6 +15,7 @@ from backend.app.models import (
     Experiment,
     FeatureSelectionRecord,
     FederatedRound,
+    ModelRecord,
     RoundParticipation,
     SelectedFeatureRecord,
     utcnow,
@@ -22,6 +23,7 @@ from backend.app.models import (
 from backend.app.tracking import ExperimentTracker
 from coordinator.outcomes import ExperimentOutcome, RoundOutcome
 from coordinator.selection.results import FederatedSelectionResult
+from coordinator.training.protocol import TrainingResult
 from shared.protocol import ClientRegistration, ReasonCode
 
 
@@ -188,6 +190,49 @@ class DatabaseRunRecorder:
             self._run_id, result.model_dump(mode="json"), "feature_selection.json"
         )
 
+    def training_finished(self, experiment_id: str, result: TrainingResult) -> None:
+        kinds = {
+            entry["model"]["name"]: entry["model"]["kind"]
+            for entry in self._config()["training"]["models"]
+        }
+        metrics: dict[str, float] = {}
+        with self._sessions() as session:
+            for trained in result.models:
+                record = ModelRecord(
+                    experiment_id=self._experiment_id,
+                    name=trained.name,
+                    kind=kinds[trained.name],
+                    status=trained.status,
+                    failure_reason=trained.failure_reason,
+                    features_source=trained.features_source,
+                    feature_names=list(trained.model.feature_names) if trained.model else [],
+                    parameters=trained.model.model_dump(mode="json") if trained.model else None,
+                )
+                session.add(record)
+                metrics[f"model.{trained.name}.trained"] = float(trained.status == "trained")
+                if trained.model is None:
+                    continue
+                fits = (
+                    [("", trained.model.fit)]
+                    if trained.model.kind == "cox"
+                    else [(f".h{h.horizon_months:g}", h.fit) for h in trained.model.horizons]
+                )
+                for suffix, fit in fits:
+                    metrics[f"model.{trained.name}{suffix}.rounds"] = fit.evaluations
+                    metrics[f"model.{trained.name}{suffix}.penalized_loglik"] = (
+                        fit.penalized_loglik_history[-1]
+                    )
+                self._tracker.log_dict(
+                    self._run_id, trained.model.model_dump(mode="json"),
+                    f"models/{trained.name}.json",
+                )
+            session.commit()
+        self._tracker.log_metrics(self._run_id, metrics, step=0)
+
+    def _config(self) -> dict:
+        with self._sessions() as session:
+            return session.get_one(Experiment, self._experiment_id).config
+
     def experiment_finished(self, outcome: ExperimentOutcome) -> None:
         with self._sessions() as session:
             experiment = session.get_one(Experiment, self._experiment_id)
@@ -208,6 +253,8 @@ class DatabaseRunRecorder:
                                metric="n_rounds", value=len(outcome.rounds), unit="count"),
                     CostRecord(experiment_id=self._experiment_id, scope="coordinator",
                                metric="selection_time", value=outcome.selection_s, unit="s"),
+                    CostRecord(experiment_id=self._experiment_id, scope="experiment",
+                               metric="training_time", value=outcome.training_s, unit="s"),
                 ]
             )
             session.commit()

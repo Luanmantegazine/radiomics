@@ -15,13 +15,17 @@ import numpy as np
 from client.data import LocalDataset
 from shared.privacy import DisclosureViolation
 from shared.protocol import (
+    BaselineHazardPayload,
     FeatureCovariancePayload,
     FeatureInventoryPayload,
     FeatureRelevancePayload,
     FeatureReliabilityPayload,
     FeatureSummaryPayload,
+    ModelState,
+    ModelUpdatePayload,
     ReasonCode,
     RoundConfig,
+    SiteInterceptPayload,
     TaskKind,
     WireModel,
 )
@@ -172,6 +176,123 @@ class FeatureCovarianceTask:
         )
 
 
+def _model_inputs(dataset: LocalDataset, config: RoundConfig) -> tuple[ModelState, np.ndarray]:
+    """Standardised model features (global centre/scale from the round)."""
+    if config.model is None:
+        raise TaskRefused(ReasonCode.MISSING_FEATURES)
+    columns = _columns(dataset, config)
+    if columns.shape[1] != len(config.model.center):
+        raise TaskRefused(ReasonCode.MISSING_FEATURES)
+    return config.model, (columns - np.array(config.model.center)) / np.array(config.model.scale)
+
+
+def _upper(matrix: np.ndarray) -> tuple[float, ...]:
+    return tuple(matrix[np.triu_indices(matrix.shape[0])].tolist())
+
+
+class ModelUpdateTask:
+    """Local log-likelihood, gradient and information at the global parameters.
+
+    ``cox``: the site's own risk sets (a site-stratified Cox model overall).
+    ``horizon_logistic``: labels and censoring weights computed by the site from
+    its own follow-up; participants censored before the horizon are never
+    labelled non-converters.
+    """
+
+    kind = TaskKind.MODEL_UPDATE
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> ModelUpdatePayload:
+        from client.models import cox, logistic  # needs the science extra
+
+        model, z = _model_inputs(dataset, config)
+        beta = np.array(model.coefficients)
+        if model.kind == "cox":
+            n_events = int(dataset.event.sum())
+            if n_events < config.privacy.min_events:
+                raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "too few local events")
+            loglik, gradient, information = cox.partial_likelihood(
+                z, dataset.time_months, dataset.event, beta
+            )
+            n_samples = dataset.n_participants
+        else:
+            y, weights = logistic.horizon_labels(
+                dataset.time_months, dataset.event, model.horizon_months, model.censoring
+            )
+            n_events, negatives = logistic.counts(y, weights)
+            if min(n_events, negatives) < config.privacy.min_events:
+                raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "too few known outcomes")
+            n_samples = n_events + negatives
+            if n_samples < config.privacy.min_cohort_size:
+                raise DisclosureViolation(ReasonCode.COHORT_TOO_SMALL, "too few known outcomes")
+            if model.intercept == "site_specific":
+                loglik, gradient, information, _ = logistic.profile_logistic(
+                    z, y, weights, beta
+                )
+            else:
+                design = np.column_stack([np.ones(len(z)), z])
+                loglik, gradient, information = logistic.weighted_logistic(
+                    design, y, weights, beta
+                )
+        return ModelUpdatePayload(
+            n_parameters=len(beta),
+            n_samples=n_samples,
+            n_events=n_events,
+            loglik=loglik,
+            gradient=tuple(np.asarray(gradient).tolist()),
+            information_upper=_upper(np.asarray(information)),
+        )
+
+
+class BaselineHazardTask:
+    """Breslow cumulative baseline hazard of the site at the requested horizons."""
+
+    kind = TaskKind.BASELINE_HAZARD
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> BaselineHazardPayload:
+        from client.models import cox
+
+        model, z = _model_inputs(dataset, config)
+        if model.kind != "cox" or not model.horizons_months:
+            raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
+        n_events = int(dataset.event.sum())
+        if n_events < config.privacy.min_events:
+            raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "too few local events")
+        return BaselineHazardPayload(
+            horizons_months=model.horizons_months,
+            n_samples=dataset.n_participants,
+            n_events=n_events,
+            cumulative_hazard=cox.breslow_cumulative_hazard(
+                z, dataset.time_months, dataset.event, np.array(model.coefficients),
+                model.horizons_months,
+            ),
+        )
+
+
+class SiteInterceptTask:
+    """The site's own intercept at the final slopes (site-specific logistic)."""
+
+    kind = TaskKind.SITE_INTERCEPT
+
+    def run(self, dataset: LocalDataset, config: RoundConfig) -> SiteInterceptPayload:
+        from client.models import logistic
+
+        model, z = _model_inputs(dataset, config)
+        if model.kind != "horizon_logistic" or model.intercept != "site_specific":
+            raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
+        y, weights = logistic.horizon_labels(
+            dataset.time_months, dataset.event, model.horizon_months, model.censoring
+        )
+        positives, negatives = logistic.counts(y, weights)
+        if min(positives, negatives) < config.privacy.min_events:
+            raise DisclosureViolation(ReasonCode.TOO_FEW_EVENTS, "too few known outcomes")
+        return SiteInterceptPayload(
+            horizon_months=model.horizon_months,
+            n_samples=positives + negatives,
+            n_events=positives,
+            intercept=logistic.profile_intercept(z, y, weights, np.array(model.coefficients)),
+        )
+
+
 def default_tasks() -> dict[TaskKind, LocalTask]:
     tasks: list[LocalTask] = [
         FeatureInventoryTask(),
@@ -179,5 +300,8 @@ def default_tasks() -> dict[TaskKind, LocalTask]:
         FeatureReliabilityTask(),
         FeatureRelevanceTask(),
         FeatureCovarianceTask(),
+        ModelUpdateTask(),
+        BaselineHazardTask(),
+        SiteInterceptTask(),
     ]
     return {task.kind: task for task in tasks}

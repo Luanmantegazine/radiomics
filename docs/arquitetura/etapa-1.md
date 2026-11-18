@@ -70,7 +70,7 @@ nenhum: a agregação é escolhida por nome na configuração
 
 ## 3. Contratos de comunicação cliente ↔ coordenador
 
-Versão do protocolo: `1.0` na Etapa 1; `1.1` a partir da Etapa 4 (ver `etapa-4.md`). Formato: JSON UTF-8, no máximo 1 MiB por mensagem.
+Versão do protocolo: `1.0` na Etapa 1; `1.1` na Etapa 4 e `1.2` a partir da Etapa 5 (ver `etapa-4.md` e `etapa-5.md`). Formato: JSON UTF-8, no máximo 1 MiB por mensagem.
 Todos os modelos são imutáveis e **fechados** (`extra="forbid"`).
 
 | Mensagem | Direção | Conteúdo |

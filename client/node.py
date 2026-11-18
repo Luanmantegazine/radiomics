@@ -10,6 +10,7 @@ from importlib import metadata
 
 from client.data import LocalDataset, LocalDataSource
 from client.egress import EgressGuard
+from client.splits import partition
 from client.tasks import LocalTask, TaskRefused, default_tasks
 from shared.costs import CostTracker
 from shared.logging import get_logger
@@ -133,4 +134,4 @@ class FederatedClient:
         task = self._tasks.get(config.task)
         if task is None:
             raise TaskRefused(ReasonCode.UNSUPPORTED_TASK)
-        return task.run(self._dataset, config)
+        return task.run(partition(self._dataset, config.partition), config)

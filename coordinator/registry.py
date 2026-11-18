@@ -19,6 +19,20 @@ def selection_tasks(config: ExperimentConfig) -> set[TaskKind]:
     return tasks
 
 
+def training_tasks(config: ExperimentConfig) -> set[TaskKind]:
+    if config.training is None:
+        return set()
+    tasks = {TaskKind.FEATURE_SUMMARY, TaskKind.MODEL_UPDATE}
+    if any(entry.model.kind == "cox" for entry in config.training.models):
+        tasks.add(TaskKind.BASELINE_HAZARD)
+    if any(
+        getattr(entry.model, "intercept", None) == "site_specific"
+        for entry in config.training.models
+    ):
+        tasks.add(TaskKind.SITE_INTERCEPT)
+    return tasks
+
+
 class ClientRegistry:
     """Admission control: only allowlisted, protocol-compatible sites join."""
 
@@ -40,8 +54,10 @@ class ClientRegistry:
         if registration.data_origin is not self._config.data_origin:
             # Never mix synthetic and real sites in one experiment.
             return ReasonCode.DATA_ORIGIN_MISMATCH
-        required = {spec.task for spec in self._config.rounds} | selection_tasks(
-            self._config
+        required = (
+            {spec.task for spec in self._config.rounds}
+            | selection_tasks(self._config)
+            | training_tasks(self._config)
         )
         if not required.issubset(registration.supported_tasks):
             return ReasonCode.UNSUPPORTED_TASK

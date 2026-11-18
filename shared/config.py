@@ -21,6 +21,7 @@ from shared.protocol import (
     Token,
 )
 from shared.selection import FederatedSelectionConfig
+from shared.training import FEDERATED_KINDS, DataSplitSpec, FromStrategy, TrainingConfig
 
 CONFIG_SCHEMA_VERSION = 1
 
@@ -121,12 +122,34 @@ class ExperimentConfig(ConfigModel):
     rounds: tuple[RoundSpec, ...] = ()
     """Fixed rounds (infrastructure phase), run before any feature selection."""
     feature_selection: FederatedSelectionConfig | None = None
+    training: TrainingConfig | None = None
+    data_split: DataSplitSpec | None = None
+    """When set, selection and training use only each site's training partition."""
     simulation: SimulationSpec | None = None
 
     @model_validator(mode="after")
     def _consistency(self) -> ExperimentConfig:
-        if not self.rounds and self.feature_selection is None:
-            raise ValueError("configure at least one round or a feature_selection")
+        if not self.rounds and self.feature_selection is None and self.training is None:
+            raise ValueError("configure at least one round, a feature_selection or training")
+        if self.training is not None:
+            strategies = (
+                {s.name for s in self.feature_selection.strategies}
+                if self.feature_selection is not None
+                else set()
+            )
+            for entry in self.training.models:
+                if entry.model.kind not in FEDERATED_KINDS:
+                    raise ValueError(
+                        f"model {entry.model.name!r}: {entry.model.kind} has no federated protocol"
+                    )
+                if (
+                    isinstance(entry.features, FromStrategy)
+                    and entry.features.from_strategy not in strategies
+                ):
+                    raise ValueError(
+                        f"model {entry.model.name!r} uses features of unknown strategy "
+                        f"{entry.features.from_strategy!r}"
+                    )
         if len(set(self.expected_clients)) != len(self.expected_clients):
             raise ValueError("expected_clients must be unique")
         if len(self.expected_clients) < self.privacy.min_clients_per_aggregate:

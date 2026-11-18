@@ -33,10 +33,25 @@ def validate_update(raw: bytes, *, sender: str, config: RoundConfig) -> ClientUp
         check_update(update, config.privacy)
     except DisclosureViolation as exc:
         raise IngressRejected(str(exc)) from exc
+    if update.status is not UpdateStatus.COMPLETED:
+        return update
+    payload = update.payload
     if (
-        update.status is UpdateStatus.COMPLETED
-        and config.feature_names is not None
-        and getattr(update.payload, "feature_names", None) != config.feature_names
+        config.feature_names is not None
+        and hasattr(payload, "feature_names")
+        and payload.feature_names != config.feature_names
     ):
         raise IngressRejected(ReasonCode.MISSING_FEATURES.value)
+    if hasattr(payload, "n_parameters") and (
+        config.model is None or payload.n_parameters != len(config.model.coefficients)
+    ):
+        raise IngressRejected("parameter count does not match the round's model")
+    if hasattr(payload, "intercept") and (
+        config.model is None or payload.horizon_months != config.model.horizon_months
+    ):
+        raise IngressRejected("horizon does not match the round's request")
+    if hasattr(payload, "cumulative_hazard") and (
+        config.model is None or payload.horizons_months != config.model.horizons_months
+    ):
+        raise IngressRejected("horizons do not match the round's request")
     return update

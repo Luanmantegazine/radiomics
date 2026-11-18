@@ -29,7 +29,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 #: Version of the client/coordinator protocol. Bump on any contract change.
-PROTOCOL_VERSION = "1.1"
+PROTOCOL_VERSION = "1.2"
 
 #: Upper bound on a single serialized message (coarse exfiltration/volume guard).
 MAX_MESSAGE_BYTES = 1_048_576
@@ -69,6 +69,9 @@ class TaskKind(StrEnum):
     FEATURE_RELIABILITY = "feature_reliability"
     FEATURE_RELEVANCE = "feature_relevance"
     FEATURE_COVARIANCE = "feature_covariance"
+    MODEL_UPDATE = "model_update"
+    BASELINE_HAZARD = "baseline_hazard"
+    SITE_INTERCEPT = "site_intercept"
 
 
 class DataOrigin(StrEnum):
@@ -142,6 +145,47 @@ class RegistrationAck(WireModel):
     reason_code: ReasonCode | None = None
 
 
+class PartitionSpec(WireModel):
+    """Which local partition a task must use (the split is computed by the site)."""
+
+    name: Literal["train", "test"]
+    test_fraction: float = Field(gt=0, lt=1)
+    seed: int = Field(ge=0)
+
+
+class ModelState(WireModel):
+    """Global model parameters at which sites evaluate their local contribution."""
+
+    kind: Literal["cox", "horizon_logistic"]
+    center: tuple[float, ...]
+    scale: tuple[float, ...]
+    coefficients: tuple[float, ...]
+    """For ``horizon_logistic`` the intercept comes first."""
+    horizon_months: float | None = Field(default=None, gt=0)
+    censoring: Literal["ipcw", "complete_case"] | None = None
+    intercept: Literal["common", "site_specific"] | None = None
+    """Horizon logistic only. ``site_specific``: each site profiles out its own
+    intercept, so ``coefficients`` holds the shared slopes only."""
+    horizons_months: tuple[float, ...] = ()
+    """Horizons at which a baseline is requested (``baseline_hazard`` task)."""
+
+    @model_validator(mode="after")
+    def _shape(self) -> ModelState:
+        p = len(self.center)
+        if len(self.scale) != p or any(v <= 0 for v in self.scale):
+            raise ValueError("scale must be positive, one entry per feature")
+        if self.kind == "horizon_logistic" and (
+            self.horizon_months is None or self.censoring is None or self.intercept is None
+        ):
+            raise ValueError("a horizon logistic model needs horizon, censoring and intercept")
+        expected = p + (1 if self.intercept == "common" else 0)
+        if len(self.coefficients) != expected:
+            raise ValueError("wrong number of coefficients")
+        if not all(math.isfinite(v) for v in (*self.center, *self.coefficients)):
+            raise ValueError("model state must be finite")
+        return self
+
+
 # --------------------------------------------------------------------------- #
 # Round configuration
 # --------------------------------------------------------------------------- #
@@ -162,6 +206,9 @@ class RoundConfig(WireModel):
     feature_names: tuple[FeatureName, ...] | None = None
     """Agreed feature schema, when the task needs one."""
     params: dict[Token, JsonScalar] = Field(default_factory=dict)
+    partition: PartitionSpec | None = None
+    """Local partition to use; None = all local participants."""
+    model: ModelState | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -289,12 +336,79 @@ class FeatureCovariancePayload(WireModel):
         return self
 
 
+class ModelUpdatePayload(WireModel):
+    """Local log-likelihood, gradient and information at the global parameters.
+
+    For ``cox`` the site's own risk sets are used (stratified by site); for
+    ``horizon_logistic`` the site's own censoring weights. Summing over sites
+    gives the corresponding pooled quantities exactly.
+    """
+
+    kind: Literal["model_update"] = "model_update"
+    n_parameters: int = Field(ge=1, le=200)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    loglik: float
+    gradient: tuple[float, ...]
+    information_upper: tuple[float, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> ModelUpdatePayload:
+        p = self.n_parameters
+        if len(self.gradient) != p or len(self.information_upper) != p * (p + 1) // 2:
+            raise ValueError("gradient needs p entries and information_upper p(p+1)/2")
+        _check_finite((self.loglik,), self.gradient, self.information_upper)
+        if self.n_events > self.n_samples:
+            raise ValueError("n_events cannot exceed n_samples")
+        return self
+
+
+class BaselineHazardPayload(WireModel):
+    """Breslow cumulative baseline hazard at the requested horizons.
+
+    ``None`` where the site has nobody at risk at that horizon (no extrapolation).
+    """
+
+    kind: Literal["baseline_hazard"] = "baseline_hazard"
+    horizons_months: tuple[float, ...] = Field(min_length=1)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    cumulative_hazard: tuple[float | None, ...]
+
+    @model_validator(mode="after")
+    def _shape(self) -> BaselineHazardPayload:
+        if len(self.cumulative_hazard) != len(self.horizons_months):
+            raise ValueError("one cumulative hazard per horizon")
+        _check_finite(self.cumulative_hazard)
+        if any(v is not None and v < 0 for v in self.cumulative_hazard):
+            raise ValueError("cumulative hazard cannot be negative")
+        return self
+
+
+class SiteInterceptPayload(WireModel):
+    """The site's own intercept of a site-specific horizon logistic model."""
+
+    kind: Literal["site_intercept"] = "site_intercept"
+    horizon_months: float = Field(gt=0)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    intercept: float
+
+    @model_validator(mode="after")
+    def _finite(self) -> SiteInterceptPayload:
+        _check_finite((self.intercept,))
+        return self
+
+
 AuthorizedPayload = Annotated[
     FeatureInventoryPayload
     | FeatureSummaryPayload
     | FeatureReliabilityPayload
     | FeatureRelevancePayload
-    | FeatureCovariancePayload,
+    | FeatureCovariancePayload
+    | ModelUpdatePayload
+    | BaselineHazardPayload
+    | SiteInterceptPayload,
     Field(discriminator="kind"),
 ]
 
@@ -396,12 +510,46 @@ class FeatureCorrelationAggregate(WireModel):
     correlation_upper: tuple[float | None, ...]
 
 
+class ModelIterationAggregate(WireModel):
+    """Global evaluation of one Newton iterate (no per-site quantity)."""
+
+    kind: Literal["model_update"] = "model_update"
+    model_name: str
+    horizon_months: float | None
+    n_clients: int = Field(ge=2)
+    n_samples: int = Field(ge=2)
+    n_events: int = Field(ge=1)
+    coefficients: tuple[float, ...]
+    loglik: float
+
+
+class BaselineHazardAggregate(WireModel):
+    kind: Literal["baseline_hazard"] = "baseline_hazard"
+    model_name: str
+    n_clients: int = Field(ge=2)
+    horizons_months: tuple[float, ...]
+    cumulative_hazard: tuple[float | None, ...]
+    """Average of the site baselines weighted by site size (see docs)."""
+
+
+class SiteInterceptAggregate(WireModel):
+    kind: Literal["site_intercept"] = "site_intercept"
+    model_name: str
+    horizon_months: float
+    n_clients: int = Field(ge=2)
+    intercept: float
+    """Average of the site intercepts weighted by site size (see docs)."""
+
+
 GlobalAggregate = Annotated[
     FeatureInventoryAggregate
     | FeatureSummaryAggregate
     | FeatureReliabilityAggregate
     | FeatureRelevanceAggregate
-    | FeatureCorrelationAggregate,
+    | FeatureCorrelationAggregate
+    | ModelIterationAggregate
+    | BaselineHazardAggregate
+    | SiteInterceptAggregate,
     Field(discriminator="kind"),
 ]
 

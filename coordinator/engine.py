@@ -13,6 +13,7 @@ from coordinator.ports import NullRecorder, RunRecorder
 from coordinator.registry import ClientRegistry
 from coordinator.selection.protocol import FederatedSelectionProtocol, RoundRequest
 from coordinator.selection.results import FederatedSelectionResult
+from coordinator.training.protocol import FederatedTrainingProtocol, TrainingResult
 from shared.config import ExperimentConfig, config_hash
 from shared.logging import get_logger
 from shared.protocol import (
@@ -20,6 +21,8 @@ from shared.protocol import (
     ClientUpdate,
     FeatureInventoryAggregate,
     FederatedPhase,
+    ModelState,
+    PartitionSpec,
     ReasonCode,
     RegistrationAck,
     RoundConfig,
@@ -45,6 +48,18 @@ class Transport(Protocol):
     def send_registration_ack(self, client_id: str, raw: bytes) -> None: ...
 
     def send_round(self, client_id: str, raw: bytes) -> bytes: ...
+
+
+class RoundProtocol(Protocol):
+    """A multi-round protocol (feature selection, training) driven by the engine."""
+
+    def next_request(self) -> RoundRequest | None: ...
+
+    def aggregate(self, request: RoundRequest, updates: Sequence[ClientUpdate]) -> WireModel: ...
+
+    def on_round_failed(self, request: RoundRequest, reason: str) -> bool:
+        """Return True to continue with the next request."""
+        ...
 
 
 class FederatedCoordinator:
@@ -111,7 +126,8 @@ class FederatedCoordinator:
         registered = self.register_clients()
         rounds: list[RoundOutcome] = []
         selection: FederatedSelectionResult | None = None
-        selection_s = 0.0
+        training: TrainingResult | None = None
+        selection_s = training_s = 0.0
         completed = len(registered) >= self._config.privacy.min_clients_per_aggregate
         if not completed:
             self._log.error("not_enough_clients", registered=len(registered))
@@ -129,6 +145,10 @@ class FederatedCoordinator:
                     break
             if completed and self._config.feature_selection is not None:
                 completed, selection, selection_s = self._run_selection(rounds, registered)
+            if completed and self._config.training is not None:
+                completed, training, training_s = self._run_training(
+                    rounds, registered, selection
+                )
         result = ExperimentOutcome(
             experiment_id=self._experiment_id,
             completed=completed,
@@ -136,6 +156,8 @@ class FederatedCoordinator:
             rounds=tuple(rounds),
             feature_selection=selection,
             selection_s=selection_s,
+            training=training,
+            training_s=training_s,
             total_bytes=sum(c.bytes_sent + c.bytes_received for r in rounds for c in r.clients),
             duration_s=time.perf_counter() - started,
         )
@@ -148,16 +170,8 @@ class FederatedCoordinator:
         protocol = FederatedSelectionProtocol(
             self._config.feature_selection, self._config.privacy, self._feature_names
         )
-        while (request := protocol.next_request()) is not None:
-            outcome = self._run_round(
-                len(rounds) + 1, request.phase, request.task, request.params,
-                request.aggregator, self._protocol_aggregate(protocol, request), clients,
-                feature_names=request.feature_names,
-            )
-            rounds.append(outcome)
-            self._recorder.round_finished(outcome)
-            if not outcome.completed:
-                return False, None, 0.0
+        if not self._drive(protocol, rounds, clients):
+            return False, None, 0.0
         started = time.perf_counter()
         try:
             selection = protocol.result()
@@ -173,8 +187,58 @@ class FederatedCoordinator:
         self._recorder.selection_finished(self._experiment_id, selection)
         return True, selection, duration
 
+    def _run_training(
+        self,
+        rounds: list[RoundOutcome],
+        clients: tuple[str, ...],
+        selection: FederatedSelectionResult | None,
+    ) -> tuple[bool, TrainingResult | None, float]:
+        started = time.perf_counter()
+        protocol = FederatedTrainingProtocol(self._config.training, selection)
+        if not self._drive(protocol, rounds, clients):  # pragma: no cover - training continues
+            return False, None, 0.0
+        try:
+            training = protocol.result()
+        except AggregationError as exc:
+            self._log.error("training_failed", reason=str(exc))
+            return False, None, time.perf_counter() - started
+        duration = time.perf_counter() - started
+        self._log.info(
+            "training_finished",
+            trained=sum(m.status == "trained" for m in training.models),
+            failed=sum(m.status == "failed" for m in training.models),
+        )
+        self._recorder.training_finished(self._experiment_id, training)
+        return True, training, duration
+
+    def _partition(self) -> PartitionSpec | None:
+        split = self._config.data_split
+        if split is None:
+            return None
+        return PartitionSpec(name="train", test_fraction=split.test_fraction, seed=split.seed)
+
+    def _drive(
+        self, protocol: RoundProtocol, rounds: list[RoundOutcome], clients: tuple[str, ...]
+    ) -> bool:
+        """Run the protocol's rounds; False when a failed round stops it."""
+        while (request := protocol.next_request()) is not None:
+            outcome = self._run_round(
+                len(rounds) + 1, request.phase, request.task, request.params,
+                request.aggregator, self._protocol_aggregate(protocol, request), clients,
+                feature_names=request.feature_names,
+                partition=self._partition(),
+                model=request.model,
+            )
+            rounds.append(outcome)
+            self._recorder.round_finished(outcome)
+            if not outcome.completed and not protocol.on_round_failed(
+                request, outcome.failure_reason or "failed"
+            ):
+                return False
+        return True
+
     @staticmethod
-    def _protocol_aggregate(protocol: FederatedSelectionProtocol, request: RoundRequest):
+    def _protocol_aggregate(protocol: RoundProtocol, request: RoundRequest):
         return lambda updates: protocol.aggregate(request, updates)
 
     @staticmethod
@@ -198,6 +262,8 @@ class FederatedCoordinator:
         clients: tuple[str, ...],
         *,
         feature_names: tuple[str, ...] | None = None,
+        partition: PartitionSpec | None = None,
+        model: ModelState | None = None,
     ) -> RoundOutcome:
         started = time.perf_counter()
         config = RoundConfig(
@@ -212,6 +278,8 @@ class FederatedCoordinator:
             privacy=self._config.privacy,
             feature_names=feature_names if feature_names is not None else self._feature_names,
             params=params,
+            partition=partition,
+            model=model,
         )
         raw_config = encode(config)
         log = self._log.bind(round_id=config.round_id, task=task.value)

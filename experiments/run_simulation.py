@@ -79,6 +79,9 @@ def main(argv: list[str] | None = None) -> int:
             }
             for strategy in outcome.feature_selection.strategies
         },
+        "training": None
+        if outcome.training is None
+        else {model.name: model.status for model in outcome.training.models},
         "total_bytes": outcome.total_bytes,
         "duration_s": round(outcome.duration_s, 4),
     }
