@@ -25,11 +25,18 @@ class ExperimentLauncher(Protocol):
         ...
 
 
-class SubprocessSimulationLauncher:
+class SubprocessLauncher:
+    """Runs a federated run in a separate process and marks failures."""
+
+    module = "experiments.run_simulation"
+
     def __init__(self, settings: Settings, sessions: sessionmaker[Session]) -> None:
         self._settings = settings
         self._sessions = sessions
         self._log = get_logger("backend.launcher")
+
+    def extra_args(self) -> list[str]:
+        return []
 
     def launch(self, experiment_id: str) -> None:
         env = {
@@ -39,15 +46,42 @@ class SubprocessSimulationLauncher:
             "FEDRAD_MLFLOW_ARTIFACT_ROOT": self._settings.mlflow_artifact_root,
         }
         result = subprocess.run(  # noqa: S603 - fixed argv, no shell
-            [sys.executable, "-m", "experiments.run_simulation", "--experiment-id", experiment_id],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
+            [sys.executable, "-m", self.module, "--experiment-id", experiment_id,
+             *self.extra_args()],
+            env=env, capture_output=True, text=True, check=False,
         )
-        self._log.info("simulation_finished", experiment_id=experiment_id, rc=result.returncode)
+        self._log.info("run_finished", experiment_id=experiment_id, rc=result.returncode,
+                       module=self.module)
         if result.returncode != 0:
             with self._sessions() as session:
                 experiment_service.mark_failed(
-                    session, experiment_id, result.stderr or "simulation process failed"
+                    session, experiment_id, result.stderr or "federated run failed"
                 )
+
+
+class SubprocessDistributedLauncher(SubprocessLauncher):
+    """Starts the coordinator; remote sites connect to it (Stage 8)."""
+
+    module = "experiments.run_distributed"
+
+    def extra_args(self) -> list[str]:
+        s = self._settings
+        if not s.sites_file:
+            raise ValueError("FEDRAD_SITES_FILE is required by the distributed launcher")
+        return ["--sites", s.sites_file, "--port", str(s.coordinator_port),
+                "--registration-timeout", str(s.registration_timeout_s),
+                "--round-timeout", str(s.round_timeout_s)]
+
+
+class SubprocessSimulationLauncher(SubprocessLauncher):
+    """Single-machine simulation (Stage 1)."""
+
+    module = "experiments.run_simulation"
+
+
+def make_launcher(settings: Settings, sessions: sessionmaker[Session]):
+    if settings.launcher == "simulation":
+        return SubprocessSimulationLauncher(settings, sessions)
+    if settings.launcher == "distributed":
+        return SubprocessDistributedLauncher(settings, sessions)
+    return None

@@ -7,29 +7,13 @@ serializing in-process transport, and runs the configured rounds.
 
 from __future__ import annotations
 
-from client.data import LocalDataSource
 from client.node import FederatedClient
-from client.synthetic import SyntheticDataSource
+from client.sources import build_data_source
 from coordinator.engine import FederatedCoordinator
 from coordinator.outcomes import ExperimentOutcome
 from coordinator.ports import RunRecorder
 from coordinator.transport import InProcessTransport
-from shared.config import ExperimentConfig, SimulatedClientSpec, SyntheticDataSourceSpec
-from shared.seeding import derive_seed
-
-
-def build_data_source(spec: SimulatedClientSpec, seed: int) -> LocalDataSource:
-    source = spec.data_source
-    if isinstance(source, SyntheticDataSourceSpec):
-        return SyntheticDataSource(
-            source, client_id=spec.client_id, seed=derive_seed(seed, "client-data", spec.client_id)
-        )
-    # Imported lazily: the imaging stack is an optional dependency.
-    from client.feature_table import FeatureTableDataSource
-
-    return FeatureTableDataSource(
-        source.features_path, source.manifest_path, source.data_origin, source.reliability_path
-    )
+from shared.config import ExperimentConfig
 
 
 def build_clients(experiment_id: str, config: ExperimentConfig) -> list[FederatedClient]:

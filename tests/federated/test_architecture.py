@@ -54,9 +54,19 @@ def test_backend_contains_no_scientific_code():
 
 def test_persistence_stays_out_of_clients_and_coordinator():
     for package in ("client", "coordinator", "shared"):
-        assert not [
-            (p, t) for p, t in _imports(package) if t in {"sqlalchemy", "mlflow", "fastapi"}
-        ]
+        assert not [(p, t) for p, t in _imports(package) if t in {"sqlalchemy", "mlflow"}]
+
+
+def test_network_code_is_confined_to_the_bindings():
+    """Only coordinator/network serves HTTP; only the site agent calls out."""
+    server = {"fastapi", "uvicorn", "starlette"}
+    clients = {"httpx", "requests", "urllib3"}
+    for package in ("client", "coordinator", "shared", "evaluation", "harmonization"):
+        for path, target in _imports(package):
+            if target in server:
+                assert "/coordinator/network/" in path, path
+            if target in clients:
+                assert path.endswith("/client/agent.py"), path
 
 
 def test_imaging_stack_is_confined_to_the_client():

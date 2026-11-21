@@ -32,7 +32,7 @@ from shared.models import ReleasedModel
 from shared.training import CoxSpec, HorizonLogisticSpec
 
 #: Version of the client/coordinator protocol. Bump on any contract change.
-PROTOCOL_VERSION = "1.3"
+PROTOCOL_VERSION = "1.4"
 
 #: Upper bound on a single serialized message (coarse exfiltration/volume guard).
 MAX_MESSAGE_BYTES = 1_048_576
@@ -110,6 +110,7 @@ class ReasonCode(StrEnum):
     DATA_ORIGIN_MISMATCH = "data_origin_mismatch"
     RELIABILITY_UNAVAILABLE = "reliability_unavailable"
     TOO_FEW_EVENTS = "too_few_events"
+    NO_RESPONSE = "no_response"
     INTERNAL_ERROR = "internal_error"
 
 
@@ -224,6 +225,15 @@ class EvaluationRequest(WireModel):
     """For the ``local`` variant: the configuration to refit on the site alone."""
     evaluation_partition: Literal["test", "all"]
     grid: tuple[float, ...] = Field(min_length=3)
+
+
+class SessionEnd(WireModel):
+    """Coordinator -> client. The experiment is over; the site may disconnect."""
+
+    message_type: Literal["session_end"] = "session_end"
+    protocol_version: Token
+    experiment_id: Identifier
+    completed: bool
 
 
 # --------------------------------------------------------------------------- #
@@ -452,7 +462,8 @@ class HarmonizationStatisticsPayload(WireModel):
     n_converted: int = Field(ge=0)
     """Observed conversions (any time) - a count, for the cohort profile."""
     median_follow_up: float | None
-    """Reverse Kaplan-Meier median follow-up in months (None if not reached)."""
+    """Reverse Kaplan-Meier median follow-up, rounded to whole months (an exact
+    median would be one participant's own follow-up time). None if not reached."""
     sum_x: tuple[float, ...]
     sum_xx_upper: tuple[float, ...]
     sum_y: tuple[float, ...]
@@ -472,6 +483,10 @@ class HarmonizationStatisticsPayload(WireModel):
                       (self.median_follow_up,))
         if self.n_converted > self.n_samples:
             raise ValueError("n_converted cannot exceed n_samples")
+        if self.median_follow_up is not None and self.median_follow_up != round(
+            self.median_follow_up
+        ):
+            raise ValueError("median_follow_up must be rounded to whole months")
         return self
 
 

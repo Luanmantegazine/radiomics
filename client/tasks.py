@@ -346,7 +346,9 @@ class HarmonizationStatisticsTask:
             covariate_names=state.covariates,
             n_samples=sums.n,
             n_converted=int(dataset.event.sum()),
-            median_follow_up=float(times[reached[0]]) if reached.size else None,
+            # A median is one participant's own follow-up time: report it rounded to
+            # whole months so that no individual time leaves the site.
+            median_follow_up=float(round(times[reached[0]])) if reached.size else None,
             sum_x=tuple(sums.sum_x.tolist()),
             sum_xx_upper=_upper(sums.sum_xx) if sums.sum_xx.size else (),
             sum_y=tuple(sums.sum_y.tolist()),

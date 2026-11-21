@@ -272,6 +272,10 @@ backend = [
     { name = "sqlalchemy" },
     { name = "uvicorn", extra = ["standard"] },
 ]
+coordinator = [
+    { name = "fastapi" },
+    { name = "uvicorn", extra = ["standard"] },
+]
 dev = [
     { name = "httpx" },
     { name = "neurocombat" },
@@ -292,13 +296,18 @@ science = [
     { name = "scikit-survival" },
     { name = "scipy" },
 ]
+site = [
+    { name = "httpx" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", marker = "extra == 'backend'", specifier = ">=1.13,<2" },
     { name = "fastapi", marker = "extra == 'backend'", specifier = ">=0.115,<1" },
+    { name = "fastapi", marker = "extra == 'coordinator'", specifier = ">=0.115,<1" },
     { name = "flwr", marker = "extra == 'flower'", specifier = ">=1.10,<2" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27,<1" },
+    { name = "httpx", marker = "extra == 'site'", specifier = ">=0.27,<1" },
     { name = "jinja2", marker = "extra == 'backend'", specifier = ">=3.1,<4" },
     { name = "mlflow-skinny", marker = "extra == 'backend'", specifier = ">=2.16,<4" },
     { name = "neurocombat", marker = "extra == 'dev'", specifier = ">=0.2.12,<0.3" },
@@ -319,8 +328,9 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'backend'", specifier = ">=2.0.30,<3" },
     { name = "structlog", specifier = ">=24.1,<26" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'backend'", specifier = ">=0.30,<1" },
+    { name = "uvicorn", extras = ["standard"], marker = "extra == 'coordinator'", specifier = ">=0.30,<1" },
 ]
-provides-extras = ["backend", "imaging", "science", "flower", "dev"]
+provides-extras = ["backend", "site", "coordinator", "imaging", "science", "flower", "dev"]
 
 [[package]]
 name = "flwr"

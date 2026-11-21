@@ -532,7 +532,7 @@
             "$ref": "#/components/schemas/PrivacyPolicy"
           },
           "protocol_version": {
-            "default": "1.3",
+            "default": "1.4",
             "pattern": "^[A-Za-z0-9_.+\\-]{1,64}$",
             "title": "Protocol Version",
             "type": "string"
@@ -588,6 +588,18 @@
       },
       "ExperimentDetail": {
         "properties": {
+          "code_version": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
           "config": {
             "additionalProperties": true,
             "title": "Config",
@@ -648,6 +660,17 @@
             "title": "Name",
             "type": "string"
           },
+          "outcome_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Digest"
+          },
           "protocol_version": {
             "title": "Protocol Version",
             "type": "string"
@@ -693,6 +716,18 @@
       },
       "ExperimentOut": {
         "properties": {
+          "code_version": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
           "config_hash": {
             "title": "Config Hash",
             "type": "string"
@@ -747,6 +782,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "outcome_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Digest"
           },
           "protocol_version": {
             "title": "Protocol Version",

@@ -166,6 +166,7 @@ def test_transport_has_no_client_to_client_route():
     public = {name for name in dir(InProcessTransport) if not name.startswith("_")}
     assert public == {
         "attach", "client_ids", "fetch_registration", "send_registration_ack", "send_round",
+        "exchange",
     }
     assert {d.value for d in Direction} == {"client_to_coordinator", "coordinator_to_client"}
 

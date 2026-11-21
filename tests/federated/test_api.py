@@ -41,7 +41,7 @@ def _client(settings) -> TestClient:
 def test_migrations_create_the_schema_of_the_models(tmp_path):
     engine = make_engine(f"sqlite:///{tmp_path}/m.db")
     upgrade(engine)
-    assert current_revision(engine) == "0001"
+    assert current_revision(engine) == "0002"
     with engine.connect() as connection:
         drift = compare_metadata(MigrationContext.configure(connection), Base.metadata)
     assert drift == [], "models changed without a migration: run `python -m " \

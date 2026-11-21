@@ -25,6 +25,8 @@ class ExperimentOut(ApiModel):
     seed: int
     config_hash: str
     mlflow_run_id: str | None
+    outcome_digest: str | None = None
+    code_version: dict[str, Any] | None = None
     error: str | None
     created_at: datetime
     started_at: datetime | None

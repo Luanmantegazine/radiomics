@@ -15,7 +15,7 @@ from backend.app.routers import (
     results,
 )
 from backend.app.security import require_token
-from backend.app.services.launchers import ExperimentLauncher, SubprocessSimulationLauncher
+from backend.app.services.launchers import ExperimentLauncher, make_launcher
 from backend.app.settings import Settings, get_settings
 from shared.logging import configure_logging
 
@@ -40,11 +40,7 @@ def create_app(
     app.state.sessions = sessions
     app.state.settings = settings
     if launcher is _UNSET:
-        launcher = (
-            SubprocessSimulationLauncher(settings, sessions)
-            if settings.launcher == "simulation"
-            else None
-        )
+        launcher = make_launcher(settings, sessions)
     app.state.launcher = launcher
 
     @app.get("/health", tags=["health"])

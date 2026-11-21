@@ -221,3 +221,12 @@ def test_evaluation_configuration_rules():
     broken["data_split"] = None
     with pytest.raises(ValidationError, match="needs data_split"):
         ExperimentConfig.model_validate(broken)
+
+
+def test_median_follow_up_is_coarsened(federated):
+    """An exact median is one participant's follow-up time; only whole months leave."""
+    _, outcome, clients, _ = federated
+    times = {float(t) for c in clients for t in c._dataset.time_months}
+    for site in outcome.harmonization.sites:
+        assert site.median_follow_up == round(site.median_follow_up)
+        assert site.median_follow_up not in times

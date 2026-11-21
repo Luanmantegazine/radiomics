@@ -11,9 +11,22 @@ without changing the coordinator engine or the client node.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol
+
+
+class ClientUnavailable(Exception):
+    """A site did not answer within the transport's deadline."""
+
+
+@dataclass(frozen=True, slots=True)
+class Reply:
+    """Answer of one site to a round (``raw`` is None when it did not answer)."""
+
+    raw: bytes | None
+    round_trip_s: float
 
 
 class Direction(StrEnum):
@@ -98,3 +111,12 @@ class InProcessTransport:
         reply = bytes(self._endpoints[client_id].handle_round(bytes(raw)))
         self.log.record(Direction.TO_COORDINATOR, client_id, reply)
         return reply
+
+    def exchange(self, client_ids: tuple[str, ...], raw: bytes) -> dict[str, Reply]:
+        """Send one round to several sites (in-process: one after the other)."""
+        replies = {}
+        for client_id in client_ids:
+            started = time.perf_counter()
+            answer = self.send_round(client_id, raw)
+            replies[client_id] = Reply(answer, time.perf_counter() - started)
+        return replies

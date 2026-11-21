@@ -14,6 +14,8 @@ class ExperimentTracker(Protocol):
 
     def log_dict(self, run_id: str | None, data: dict[str, Any], artifact_file: str) -> None: ...
 
+    def set_tags(self, run_id: str | None, tags: dict[str, str]) -> None: ...
+
     def end_run(self, run_id: str | None, succeeded: bool) -> None: ...
 
 
@@ -27,6 +29,9 @@ class NullTracker:
         return None
 
     def log_dict(self, run_id, data, artifact_file) -> None:
+        return None
+
+    def set_tags(self, run_id, tags) -> None:
         return None
 
     def end_run(self, run_id, succeeded) -> None:
@@ -67,6 +72,10 @@ class MlflowTracker:
 
     def log_dict(self, run_id, data, artifact_file) -> None:
         self._client.log_dict(run_id, data, artifact_file)
+
+    def set_tags(self, run_id, tags) -> None:
+        for key, value in tags.items():
+            self._client.set_tag(run_id, key, value)
 
     def end_run(self, run_id, succeeded) -> None:
         self._client.set_terminated(run_id, status="FINISHED" if succeeded else "FAILED")

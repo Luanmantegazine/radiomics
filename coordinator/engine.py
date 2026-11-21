@@ -19,6 +19,7 @@ from coordinator.registry import ClientRegistry
 from coordinator.selection.protocol import FederatedSelectionProtocol, RoundRequest
 from coordinator.selection.results import FederatedSelectionResult
 from coordinator.training.protocol import FederatedTrainingProtocol, TrainingResult
+from coordinator.transport import Reply
 from shared.config import ExperimentConfig, config_hash
 from shared.logging import get_logger
 from shared.protocol import (
@@ -55,6 +56,10 @@ class Transport(Protocol):
     def send_registration_ack(self, client_id: str, raw: bytes) -> None: ...
 
     def send_round(self, client_id: str, raw: bytes) -> bytes: ...
+
+    def exchange(self, client_ids: tuple[str, ...], raw: bytes) -> dict[str, Reply]:
+        """Send one round to several sites and collect their answers."""
+        ...
 
 
 class RoundProtocol(Protocol):
@@ -384,10 +389,22 @@ class FederatedCoordinator:
         accepted: list[ClientUpdate] = []
         client_outcomes: list[ClientRoundOutcome] = []
         communication = 0.0
+        replies = self._transport.exchange(tuple(clients), raw_config)
         for client_id in clients:
-            sent = time.perf_counter()
-            raw_update = self._transport.send_round(client_id, raw_config)
-            round_trip = time.perf_counter() - sent
+            reply = replies[client_id]
+            raw_update, round_trip = reply.raw, reply.round_trip_s
+            if raw_update is None:
+                log.warning("no_response", client_id=client_id)
+                client_outcomes.append(
+                    ClientRoundOutcome(
+                        client_id=client_id,
+                        status=UpdateStatus.FAILED,
+                        reason_code=ReasonCode.NO_RESPONSE,
+                        bytes_received=len(raw_config),
+                        round_trip_s=round_trip,
+                    )
+                )
+                continue
             try:
                 update = validate_update(raw_update, sender=client_id, config=config)
             except IngressRejected as exc:

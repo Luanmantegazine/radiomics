@@ -610,7 +610,7 @@ export interface components {
             privacy?: components["schemas"]["PrivacyPolicy"];
             /**
              * Protocol Version
-             * @default 1.3
+             * @default 1.4
              */
             protocol_version: string;
             /**
@@ -631,6 +631,10 @@ export interface components {
         };
         /** ExperimentDetail */
         ExperimentDetail: {
+            /** Code Version */
+            code_version?: {
+                [key: string]: unknown;
+            } | null;
             /** Config */
             config: {
                 [key: string]: unknown;
@@ -654,6 +658,8 @@ export interface components {
             mlflow_run_id: string | null;
             /** Name */
             name: string;
+            /** Outcome Digest */
+            outcome_digest?: string | null;
             /** Protocol Version */
             protocol_version: string;
             /** Seed */
@@ -665,6 +671,10 @@ export interface components {
         };
         /** ExperimentOut */
         ExperimentOut: {
+            /** Code Version */
+            code_version?: {
+                [key: string]: unknown;
+            } | null;
             /** Config Hash */
             config_hash: string;
             /**
@@ -684,6 +694,8 @@ export interface components {
             mlflow_run_id: string | null;
             /** Name */
             name: string;
+            /** Outcome Digest */
+            outcome_digest?: string | null;
             /** Protocol Version */
             protocol_version: string;
             /** Seed */

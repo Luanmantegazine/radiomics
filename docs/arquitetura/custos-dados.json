@@ -1,0 +1,320 @@
+{
+  "notice": "SYNTHETIC DATA - software cost properties, not scientific results.",
+  "machine": {
+    "platform": "Linux-6.18.44-fc-v726-x86_64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "peak_memory_bytes": 206131200,
+  "base": {
+    "sites": 3,
+    "features": 15,
+    "participants": 300
+  },
+  "simulation": [
+    {
+      "factor": "sites",
+      "sites": 2,
+      "features": 15,
+      "participants": 300,
+      "completed": true,
+      "rounds": 40,
+      "total_bytes": 162681,
+      "largest_message_bytes": 2489,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 16001
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 11245
+        },
+        "training": {
+          "rounds": 29,
+          "bytes": 98219
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 37216
+        }
+      },
+      "time_s": {
+        "total": 0.323,
+        "harmonization": 0.017,
+        "training": 0.171,
+        "evaluation": 0.098
+      }
+    },
+    {
+      "factor": "sites",
+      "sites": 3,
+      "features": 15,
+      "participants": 300,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 238510,
+      "largest_message_bytes": 2579,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 24034
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 16849
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 141729
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 55898
+        }
+      },
+      "time_s": {
+        "total": 0.513,
+        "harmonization": 0.013,
+        "training": 0.259,
+        "evaluation": 0.176
+      }
+    },
+    {
+      "factor": "sites",
+      "sites": 5,
+      "features": 15,
+      "participants": 300,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 397798,
+      "largest_message_bytes": 2613,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 40005
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 28096
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 235703
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 93994
+        }
+      },
+      "time_s": {
+        "total": 0.881,
+        "harmonization": 0.023,
+        "training": 0.449,
+        "evaluation": 0.335
+      }
+    },
+    {
+      "factor": "sites",
+      "sites": 8,
+      "features": 15,
+      "participants": 300,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 637394,
+      "largest_message_bytes": 2655,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 64090
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 44960
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 378222
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 150122
+        }
+      },
+      "time_s": {
+        "total": 1.312,
+        "harmonization": 0.047,
+        "training": 0.686,
+        "evaluation": 0.448
+      }
+    },
+    {
+      "factor": "features",
+      "sites": 3,
+      "features": 50,
+      "participants": 300,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 279872,
+      "largest_message_bytes": 3955,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 52377
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 29880
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 141909
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 55706
+        }
+      },
+      "time_s": {
+        "total": 0.418,
+        "harmonization": 0.017,
+        "training": 0.212,
+        "evaluation": 0.144
+      }
+    },
+    {
+      "factor": "features",
+      "sites": 3,
+      "features": 100,
+      "participants": 300,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 333667,
+      "largest_message_bytes": 7315,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 92823
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 42793
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 142131
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 55920
+        }
+      },
+      "time_s": {
+        "total": 0.503,
+        "harmonization": 0.023,
+        "training": 0.247,
+        "evaluation": 0.175
+      }
+    },
+    {
+      "factor": "participants",
+      "sites": 3,
+      "features": 15,
+      "participants": 100,
+      "completed": true,
+      "rounds": 40,
+      "total_bytes": 235207,
+      "largest_message_bytes": 1783,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 23923
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 16367
+        },
+        "training": {
+          "rounds": 29,
+          "bytes": 147342
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 47575
+        }
+      },
+      "time_s": {
+        "total": 0.197,
+        "harmonization": 0.008,
+        "training": 0.101,
+        "evaluation": 0.061
+      }
+    },
+    {
+      "factor": "participants",
+      "sites": 3,
+      "features": 15,
+      "participants": 1000,
+      "completed": true,
+      "rounds": 39,
+      "total_bytes": 248177,
+      "largest_message_bytes": 3222,
+      "phases": {
+        "harmonization": {
+          "rounds": 4,
+          "bytes": 24084
+        },
+        "feature_selection": {
+          "rounds": 3,
+          "bytes": 17470
+        },
+        "training": {
+          "rounds": 28,
+          "bytes": 142314
+        },
+        "evaluation": {
+          "rounds": 4,
+          "bytes": 64309
+        }
+      },
+      "time_s": {
+        "total": 1.104,
+        "harmonization": 0.034,
+        "training": 0.533,
+        "evaluation": 0.471
+      }
+    }
+  ],
+  "loopback_http": {
+    "sites": 3,
+    "features": 15,
+    "participants": 300,
+    "completed": true,
+    "rounds": 39,
+    "total_bytes": 238468,
+    "largest_message_bytes": 2578,
+    "phases": {
+      "harmonization": {
+        "rounds": 4,
+        "bytes": 24022
+      },
+      "feature_selection": {
+        "rounds": 3,
+        "bytes": 16841
+      },
+      "training": {
+        "rounds": 28,
+        "bytes": 141715
+      },
+      "evaluation": {
+        "rounds": 4,
+        "bytes": 55890
+      }
+    },
+    "time_s": {
+      "total": 1.367,
+      "harmonization": 0.062,
+      "training": 0.549,
+      "evaluation": 0.258
+    }
+  }
+}

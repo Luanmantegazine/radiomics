@@ -1,0 +1,52 @@
+# Distributed demo, layered on the main compose file:
+#
+#   infrastructure/distributed/demo.sh
+#
+# Relative paths resolve from infrastructure/ (the directory of the first compose
+# file), hence ./distributed/...
+#
+# The backend runs the coordinator (launcher: distributed) and listens for sites
+# on port 8700 of the "federation" network. Each site is a separate container
+# that only joins "federation": it cannot reach the database or MLflow, and the
+# coordinator never connects to it (sites poll out).
+services:
+  postgres:
+    networks: [internal]
+  mlflow:
+    networks: [internal]
+  backend:
+    environment:
+      FEDRAD_LAUNCHER: distributed
+      FEDRAD_SITES_FILE: /run/fedrad/sites.yaml
+      FEDRAD_COORDINATOR_PORT: "8700"
+      FEDRAD_REGISTRATION_TIMEOUT_S: "300"
+    volumes:
+      - ./distributed/.secrets/sites.yaml:/run/fedrad/sites.yaml:ro
+    networks: [internal, federation]
+  frontend:
+    networks: [internal]
+
+  site-01: &site
+    image: fedradiomics-backend
+    command: ["python", "-m", "client.agent", "--site-config", "/etc/fedrad/site.yaml",
+              "--experiment-id", "${EXPERIMENT_ID:?set EXPERIMENT_ID}"]
+    volumes:
+      - ./distributed/site-01.yaml:/etc/fedrad/site.yaml:ro
+      - ./distributed/.secrets/client-01.token:/run/secrets/site_token:ro
+    networks: [federation]
+    restart: "no"
+    profiles: [sites]
+  site-02:
+    <<: *site
+    volumes:
+      - ./distributed/site-02.yaml:/etc/fedrad/site.yaml:ro
+      - ./distributed/.secrets/client-02.token:/run/secrets/site_token:ro
+  site-03:
+    <<: *site
+    volumes:
+      - ./distributed/site-03.yaml:/etc/fedrad/site.yaml:ro
+      - ./distributed/.secrets/client-03.token:/run/secrets/site_token:ro
+
+networks:
+  internal: {}
+  federation: {}

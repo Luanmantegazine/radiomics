@@ -275,9 +275,19 @@ class DatabaseRunRecorder:
             return session.get_one(Experiment, self._experiment_id).config
 
     def experiment_finished(self, outcome: ExperimentOutcome) -> None:
+        from coordinator.provenance import code_provenance, outcome_digest
+
+        digest, code = outcome_digest(outcome), code_provenance()
+        self._tracker.set_tags(self._run_id, {
+            "outcome_digest": digest,
+            "git_commit": code["git_commit"] or "unknown",
+            "uv_lock_sha256": code["uv_lock_sha256"] or "unknown",
+        })
         with self._sessions() as session:
             experiment = session.get_one(Experiment, self._experiment_id)
             experiment.status = "completed" if outcome.completed else "failed"
+            experiment.outcome_digest = digest
+            experiment.code_version = code
             if not outcome.completed:
                 experiment.error = next(
                     (r.failure_reason for r in outcome.rounds if r.failure_reason),

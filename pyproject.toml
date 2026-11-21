@@ -35,6 +35,10 @@ backend = [
     "alembic>=1.13,<2",          # schema migrations (also used by the MLflow SQL store)
     "jinja2>=3.1,<4",            # HTML reports
 ]
+# Site agent of a distributed deployment (Stage 8): outbound HTTPS only.
+site = ["httpx>=0.27,<1"]
+# Coordinator endpoints of a distributed deployment (Stage 8).
+coordinator = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1"]
 # Radiomic pipeline of the federated clients (Stage 2).
 #
 # PyRadiomics is pinned to the exact commit of the v3.1.0 tag and built from

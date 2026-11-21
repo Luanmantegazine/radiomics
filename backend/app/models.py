@@ -34,6 +34,10 @@ class Experiment(Base):
     config: Mapped[dict[str, Any]] = mapped_column(JSON)
     config_hash: Mapped[str] = mapped_column(String(64))
     mlflow_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    outcome_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    """SHA-256 of the released results (see experiments.provenance)."""
+    code_version: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    """Commit, lockfile hash and library versions of the code that ran it."""
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

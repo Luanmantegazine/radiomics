@@ -1,5 +1,6 @@
-# Backend API image. Also contains the coordinator and the simulation runner,
-# which the Stage 1 launcher spawns as a separate process.
+# Backend API image. Also contains the coordinator (simulation and distributed
+# runners, which the launchers spawn as separate processes) and the site agent
+# used by the distributed demo.
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.11 /uv /usr/local/bin/uv
@@ -9,7 +10,7 @@ WORKDIR /app
 
 # Dependencies first (cached layer), pinned by uv.lock.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra backend --extra science --no-install-project
+RUN uv sync --frozen --no-dev --extra backend --extra science --extra site --no-install-project
 
 COPY shared ./shared
 COPY client ./client
