@@ -12,8 +12,18 @@ from backend.app.models import (
     HarmonizationRecord,
     SelectedFeatureRecord,
 )
-from backend.app.schemas import CostOut, ResultsOut, RoundResult, SelectedFeatureOut
+from backend.app.schemas import (
+    CostOut,
+    CostSummary,
+    EvaluationOut,
+    FeatureSelectionOut,
+    HarmonizationOut,
+    ResultsOut,
+    RoundResult,
+    SelectedFeatureOut,
+)
 from backend.app.services import experiments as service
+from backend.app.services.summaries import cost_summary
 
 router = APIRouter(prefix="/results", tags=["results"])
 
@@ -44,8 +54,8 @@ def get_results(experiment_id: str, session: Session = Depends(get_session)):
     )
 
 
-@router.get("/{experiment_id}/feature-selection")
-def get_feature_selection(experiment_id: str, session: Session = Depends(get_session)) -> dict:
+@router.get("/{experiment_id}/feature-selection", response_model=FeatureSelectionOut)
+def get_feature_selection(experiment_id: str, session: Session = Depends(get_session)):
     """Released federated selection result: strategies, selections, stability."""
     experiment = _experiment_or_404(session, experiment_id)
     record = session.scalar(
@@ -71,8 +81,8 @@ def get_selected_features(
     )
 
 
-@router.get("/{experiment_id}/harmonization")
-def get_harmonization(experiment_id: str, session: Session = Depends(get_session)) -> dict:
+@router.get("/{experiment_id}/harmonization", response_model=HarmonizationOut)
+def get_harmonization(experiment_id: str, session: Session = Depends(get_session)):
     """Site effects before/after harmonization and clinical differences between sites."""
     experiment = _experiment_or_404(session, experiment_id)
     record = session.scalar(
@@ -84,13 +94,13 @@ def get_harmonization(experiment_id: str, session: Session = Depends(get_session
             **record.result}
 
 
-@router.get("/{experiment_id}/evaluation")
+@router.get("/{experiment_id}/evaluation", response_model=EvaluationOut)
 def get_evaluation(
     experiment_id: str,
     model_name: str | None = None,
     scope: str | None = None,
     session: Session = Depends(get_session),
-) -> dict:
+):
     """Pooled (site-stratified) metrics per model, variant and scope."""
     experiment = _experiment_or_404(session, experiment_id)
     query = select(EvaluationRecord).where(EvaluationRecord.experiment_id == experiment_id)
@@ -108,6 +118,13 @@ def get_evaluation(
             for r in rows
         ],
     }
+
+
+@router.get("/{experiment_id}/costs/summary", response_model=CostSummary)
+def get_cost_summary(experiment_id: str, session: Session = Depends(get_session)):
+    """Costs grouped by phase, client and round."""
+    _experiment_or_404(session, experiment_id)
+    return cost_summary(session, experiment_id)
 
 
 @router.get("/{experiment_id}/costs", response_model=list[CostOut])

@@ -32,7 +32,7 @@ def test_pipeline_completes_with_every_phase(run):
     _, outcome, _ = run
     assert outcome.completed
     phases = {r.phase.value for r in outcome.rounds}
-    assert phases == {"infrastructure", "feature_selection", "training", "evaluation"}
+    assert phases == {"harmonization", "feature_selection", "training", "evaluation"}
     assert outcome.harmonization.method == "combat"
     internal = _evaluations(outcome, scope="internal")
     assert {(e.model_name, e.variant) for e in internal} >= {

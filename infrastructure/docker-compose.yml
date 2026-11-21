@@ -1,10 +1,10 @@
-# Local environment: PostgreSQL + MLflow + backend API.
+# Local environment: PostgreSQL + MLflow + backend API + dashboard.
 #
 #   cp infrastructure/.env.example infrastructure/.env   # then edit the password
 #   docker compose -f infrastructure/docker-compose.yml up --build
 #
-# API: http://localhost:8000/docs      MLflow: http://localhost:5000
-# The frontend service is added in Stage 7.
+# Dashboard: http://localhost:8080   API: http://localhost:8000/docs   MLflow: http://localhost:5000
+# Optional: set FEDRAD_API_TOKEN in infrastructure/.env to require a bearer token.
 name: fedradiomics
 
 services:
@@ -49,12 +49,23 @@ services:
       FEDRAD_MLFLOW_TRACKING_URI: http://mlflow:5000
       FEDRAD_MLFLOW_ARTIFACT_ROOT: ""
       FEDRAD_LAUNCHER: simulation
+      FEDRAD_API_TOKEN: ${FEDRAD_API_TOKEN:-}
+      FEDRAD_CORS_ORIGINS: '["http://localhost:8080"]'
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
       mlflow:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      backend:
         condition: service_started
 
 volumes:

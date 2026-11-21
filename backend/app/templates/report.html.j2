@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relatório {{ data.summary.experiment.name }}</title>
+<style>
+  :root { --fg:#1d2733; --muted:#5b6b7b; --line:#d8dee6; --warn-bg:#fff4e5; --warn:#8a4b00; }
+  body { font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg);
+         margin: 0 auto; max-width: 1100px; padding: 24px 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 28px 0 8px; }
+  .muted { color: var(--muted); }
+  .notice { background: var(--warn-bg); color: var(--warn); border: 1px solid #f0c27a;
+            padding: 10px 12px; border-radius: 6px; font-weight: 600; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+  th { background: #f4f6f9; } td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .wrap { overflow-x: auto; }
+  code { font-size: 12px; }
+</style>
+</head>
+<body>
+{% set exp = data.summary.experiment %}
+{% macro num(v, digits=3) %}{% if v is none %}—{% else %}{{ "%.*f"|format(digits, v) }}{% endif %}{% endmacro %}
+<h1>{{ exp.name }}</h1>
+<div class="muted">Experimento <code>{{ exp.id }}</code> · configuração <code>{{ exp.config_hash }}</code>
+  · protocolo {{ data.software.protocol_version }} · fedradiomics {{ data.software.fedradiomics }}
+  · gerado em {{ data.generated_at }}</div>
+{% if data.notice %}<div class="notice">DADOS SINTÉTICOS: estes resultados validam apenas o software e não têm significado científico.</div>{% endif %}
+
+<h2>Execução</h2>
+<table>
+  <tr><th>Status</th><td>{{ exp.status }}</td><th>Origem dos dados</th><td>{{ exp.data_origin }}</td></tr>
+  <tr><th>Sites registrados</th><td>{{ data.summary.registered_clients }}</td><th>Recusados</th><td>{{ data.summary.rejected_clients }}</td></tr>
+  <tr><th>Rodadas</th><td>{{ data.summary.rounds.total }} ({{ data.summary.rounds.failed }} com falha)</td>
+      <th>Fases</th><td>{{ data.summary.planned_phases|join(", ") }}</td></tr>
+  <tr><th>Tempo total (s)</th><td>{{ num(data.summary.duration_s, 2) }}</td>
+      <th>Bytes trafegados</th><td>{{ "{:,.0f}".format(data.summary.total_bytes or 0) }}</td></tr>
+  <tr><th>Execução MLflow</th><td colspan="3"><code>{{ exp.mlflow_run_id or "—" }}</code></td></tr>
+</table>
+
+{% if data.harmonization %}
+{% set h = data.harmonization %}
+<h2>Harmonização ({{ h.method }})</h2>
+<table>
+  <tr><th>Covariáveis preservadas</th><td>{{ h.covariates|join(", ") or "—" }}</td></tr>
+  <tr><th>η² de site (mediana) antes</th><td>{{ num(h.site_effect_before.median_eta_squared, 4) }}</td></tr>
+  <tr><th>η² de site (mediana) depois</th><td>{{ num(h.site_effect_after.median_eta_squared if h.site_effect_after else none, 4) }}</td></tr>
+  <tr><th>Diferença clínica entre sites (η² por covariável)</th>
+      <td>{% for k, v in h.covariate_eta_squared.items() %}{{ k }}: {{ num(v, 3) }} {% endfor %}</td></tr>
+  <tr><th>Qui-quadrado da taxa de conversão entre sites</th><td>{{ num(h.event_rate_chi2, 2) }}</td></tr>
+</table>
+{% endif %}
+
+{% if data.feature_selection %}
+<h2>Seleção federada de atributos</h2>
+<div class="wrap"><table>
+  <tr><th>Estratégia</th><th>Atributos selecionados</th><th>Estabilidade (Nogueira, sem um site)</th><th>Jaccard médio</th></tr>
+  {% for s in data.feature_selection.strategies %}
+  <tr><td>{{ s.name }}</td>
+      <td>{% if s.completed %}{{ s.selected|map(attribute="feature")|join(", ") }}{% else %}falhou: {{ s.failure_reason }}{% endif %}</td>
+      <td class="num">{{ num(s.leave_one_site_out.nogueira_stability if s.leave_one_site_out else none) }}</td>
+      <td class="num">{{ num(s.leave_one_site_out.mean_jaccard_to_full if s.leave_one_site_out else none) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if model_rows %}
+<h2>Modelos</h2>
+<div class="wrap"><table>
+  <tr><th>Modelo</th><th>Horizonte</th><th>Atributo</th><th>Coeficiente</th><th>Erro-padrão</th></tr>
+  {% for r in model_rows %}
+  <tr><td>{{ r.model }}{% if r.status != "trained" %} ({{ r.status }}){% endif %}</td>
+      <td>{{ r.horizon_months if r.horizon_months is not none else "—" }}</td>
+      <td>{{ r.feature or "—" }}</td><td class="num">{{ num(r.coefficient) }}</td>
+      <td class="num">{{ num(r.standard_error) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+{% if evaluation_rows %}
+<h2>Avaliação</h2>
+<p class="muted">AUC e C comparam apenas participantes do mesmo site (estratificados por site). Sem intervalos de confiança.</p>
+<div class="wrap"><table>
+  <tr><th>Modelo</th><th>Variante</th><th>Escopo</th><th>Nível</th><th>Horizonte</th><th>n</th><th>Eventos</th>
+      <th>AUC</th><th>C</th><th>Brier</th><th>Brier escalado</th><th>O/E</th></tr>
+  {% for r in evaluation_rows %}
+  <tr><td>{{ r.model }}</td><td>{{ r.variant }}</td><td>{{ r.scope }}</td><td>{{ r.level }}</td>
+      <td class="num">{{ r.horizon_months }}</td><td class="num">{{ r.n }}</td><td class="num">{{ r.n_events }}</td>
+      <td class="num">{{ num(r.auc) }}</td><td class="num">{{ num(r.c_index) }}</td><td class="num">{{ num(r.brier) }}</td>
+      <td class="num">{{ num(r.scaled_brier) }}</td><td class="num">{{ num(r.o_e, 2) }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>Custos</h2>
+<table>
+  <tr><th>Fase</th><th>Rodadas</th><th>Bytes dos sites</th><th>Bytes para os sites</th><th>Tempo das rodadas (s)</th></tr>
+  {% for p in data.costs.by_phase %}
+  <tr><td>{{ p.phase }}</td><td class="num">{{ p.rounds }}</td>
+      <td class="num">{{ "{:,.0f}".format(p.bytes_from_clients) }}</td>
+      <td class="num">{{ "{:,.0f}".format(p.bytes_to_clients) }}</td>
+      <td class="num">{{ num(p.round_time_s, 3) }}</td></tr>
+  {% endfor %}
+</table>
+<p class="muted">Relatório gerado a partir dos resultados liberados pelo coordenador; não contém dados individuais.</p>
+</body>
+</html>

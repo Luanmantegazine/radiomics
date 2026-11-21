@@ -32,7 +32,8 @@ backend = [
     "psycopg[binary]>=3.2,<4",
     "pydantic-settings>=2.3,<3",
     "mlflow-skinny>=2.16,<4",
-    "alembic>=1.13,<2",          # required by the MLflow SQL tracking store
+    "alembic>=1.13,<2",          # schema migrations (also used by the MLflow SQL store)
+    "jinja2>=3.1,<4",            # HTML reports
 ]
 # Radiomic pipeline of the federated clients (Stage 2).
 #

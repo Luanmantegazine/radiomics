@@ -9,8 +9,6 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.app.models import Base
-
 
 def make_engine(database_url: str) -> Engine:
     url = make_url(database_url)
@@ -23,12 +21,10 @@ def make_engine(database_url: str) -> Engine:
 
 
 def init_db(engine: Engine) -> sessionmaker[Session]:
-    """Create missing tables and return a session factory.
+    """Apply pending schema migrations and return a session factory."""
+    from backend.app.migrations import upgrade
 
-    Stage 1 uses ``create_all``; schema migrations (Alembic) are introduced
-    when the API is consolidated in Stage 7.
-    """
-    Base.metadata.create_all(engine)
+    upgrade(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 

@@ -1,0 +1,414 @@
+{
+ "id": "exp-6c108df41849",
+ "name": "stage6-harmonization-evaluation",
+ "status": "completed",
+ "data_origin": "synthetic",
+ "protocol_version": "1.3",
+ "seed": 20261118,
+ "config_hash": "0e3ba2b3dd1efe5a",
+ "mlflow_run_id": "8d2a2feba5d0417bbd60950a36458828",
+ "error": null,
+ "created_at": "2026-11-21T13:46:41.209446Z",
+ "started_at": "2026-11-21T13:46:44.413947Z",
+ "finished_at": "2026-11-21T13:46:54.730766Z",
+ "config": {
+  "schema_version": 1,
+  "name": "stage6-harmonization-evaluation",
+  "description": "ComBat harmonization, federated selection and training, distributed evaluation and leave-one-site-out external validation.",
+  "seed": 20261118,
+  "protocol_version": "1.3",
+  "data_origin": "synthetic",
+  "privacy": {
+   "min_cohort_size": 10,
+   "min_clients_per_aggregate": 2,
+   "min_events": 5
+  },
+  "expected_clients": [
+   "client-01",
+   "client-02",
+   "client-03"
+  ],
+  "rounds": [],
+  "feature_selection": {
+   "reliability_column": "min_icc",
+   "redundancy": {
+    "correlation": "spearman",
+    "max_candidates": 20
+   },
+   "strategies": [
+    {
+     "name": "sequential_stratified",
+     "reliability": {
+      "aggregation": "minimum",
+      "min_value": 0.75
+     },
+     "relevance": {
+      "aggregation": "stratified_score"
+     },
+     "agreement": {
+      "method": "i_squared",
+      "min_value": 0.5
+     },
+     "ranking": {
+      "kind": "sequential"
+     },
+     "max_abs_correlation": 0.8,
+     "n_features": 3
+    },
+    {
+     "name": "sequential_stouffer",
+     "reliability": {
+      "aggregation": "minimum",
+      "min_value": 0.75
+     },
+     "relevance": {
+      "aggregation": "stouffer"
+     },
+     "agreement": {
+      "method": "i_squared",
+      "min_value": 0.5
+     },
+     "ranking": {
+      "kind": "sequential"
+     },
+     "max_abs_correlation": 0.8,
+     "n_features": 3
+    },
+    {
+     "name": "sequential_mean_rank",
+     "reliability": {
+      "aggregation": "weighted_mean",
+      "min_value": 0.75
+     },
+     "relevance": {
+      "aggregation": "mean_rank"
+     },
+     "agreement": {
+      "method": "sign_consistency",
+      "min_value": 1.0
+     },
+     "ranking": {
+      "kind": "sequential"
+     },
+     "max_abs_correlation": 0.8,
+     "n_features": 3
+    },
+    {
+     "name": "weighted_equal",
+     "reliability": {
+      "aggregation": "minimum",
+      "min_value": -1.0
+     },
+     "relevance": {
+      "aggregation": "stratified_score"
+     },
+     "agreement": {
+      "method": "i_squared",
+      "min_value": 0.0
+     },
+     "ranking": {
+      "kind": "weighted",
+      "weights": {
+       "reliability": 1.0,
+       "relevance": 1.0,
+       "agreement": 1.0
+      }
+     },
+     "max_abs_correlation": 0.8,
+     "n_features": 3
+    },
+    {
+     "name": "weighted_relevance_heavy",
+     "reliability": {
+      "aggregation": "minimum",
+      "min_value": -1.0
+     },
+     "relevance": {
+      "aggregation": "stratified_score"
+     },
+     "agreement": {
+      "method": "i_squared",
+      "min_value": 0.0
+     },
+     "ranking": {
+      "kind": "weighted",
+      "weights": {
+       "reliability": 0.2,
+       "relevance": 0.6,
+       "agreement": 0.2
+      }
+     },
+     "max_abs_correlation": 0.8,
+     "n_features": 3
+    },
+    {
+     "name": "relevance_only",
+     "reliability": null,
+     "relevance": {
+      "aggregation": "stratified_score"
+     },
+     "agreement": null,
+     "ranking": {
+      "kind": "sequential"
+     },
+     "max_abs_correlation": null,
+     "n_features": 3
+    }
+   ],
+   "leave_one_site_out": true
+  },
+  "training": {
+   "horizons_months": [
+    12.0,
+    24.0,
+    36.0
+   ],
+   "models": [
+    {
+     "model": {
+      "kind": "cox",
+      "name": "cox_selected",
+      "optimizer": {
+       "ridge": 1.0,
+       "max_iterations": 25,
+       "tolerance": 1e-10
+      }
+     },
+     "features": {
+      "from_strategy": "sequential_stratified"
+     }
+    },
+    {
+     "model": {
+      "kind": "cox",
+      "name": "cox_relevance_only",
+      "optimizer": {
+       "ridge": 1.0,
+       "max_iterations": 25,
+       "tolerance": 1e-10
+      }
+     },
+     "features": {
+      "from_strategy": "relevance_only"
+     }
+    },
+    {
+     "model": {
+      "kind": "horizon_logistic",
+      "name": "logistic_ipcw_site",
+      "censoring": "ipcw",
+      "intercept": "site_specific",
+      "optimizer": {
+       "ridge": 1.0,
+       "max_iterations": 25,
+       "tolerance": 1e-10
+      }
+     },
+     "features": {
+      "from_strategy": "sequential_stratified"
+     }
+    },
+    {
+     "model": {
+      "kind": "cox",
+      "name": "cox_reference",
+      "optimizer": {
+       "ridge": 1.0,
+       "max_iterations": 25,
+       "tolerance": 1e-10
+      }
+     },
+     "features": {
+      "names": [
+       "feat_strong",
+       "feat_moderate"
+      ]
+     }
+    },
+    {
+     "model": {
+      "kind": "cox",
+      "name": "cox_clinical_reference",
+      "optimizer": {
+       "ridge": 1.0,
+       "max_iterations": 25,
+       "tolerance": 1e-10
+      }
+     },
+     "features": {
+      "names": [
+       "clin_age"
+      ]
+     }
+    }
+   ]
+  },
+  "harmonization": {
+   "method": "combat",
+   "covariates": [
+    "clin_age"
+   ],
+   "empirical_bayes": true,
+   "eb_tolerance": 0.0001,
+   "release_site_summaries": true
+  },
+  "evaluation": {
+   "partition": "test",
+   "calibration_bins": 10,
+   "decision_thresholds": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+   ],
+   "site_baseline_variant": true,
+   "local_models": true,
+   "release_site_metrics": true,
+   "external_validation": "leave_one_site_out"
+  },
+  "data_split": {
+   "test_fraction": 0.3,
+   "seed": 7
+  },
+  "simulation": {
+   "clients": [
+    {
+     "client_id": "client-01",
+     "data_source": {
+      "kind": "synthetic",
+      "n_participants": 300,
+      "feature_names": [
+       "clin_age",
+       "feat_strong",
+       "feat_copy",
+       "feat_noisy",
+       "feat_mixed",
+       "feat_moderate",
+       "feat_n01",
+       "feat_n02",
+       "feat_n03",
+       "feat_n04",
+       "feat_n05",
+       "feat_n06",
+       "feat_n07",
+       "feat_n08",
+       "feat_n09",
+       "feat_n10"
+      ],
+      "log_hazard_effects": {
+       "feat_strong": 0.8,
+       "feat_noisy": 0.8,
+       "feat_mixed": 0.9,
+       "feat_moderate": 0.4,
+       "clin_age": 0.3
+      },
+      "derived_features": {
+       "feat_copy": {
+        "source": "feat_strong",
+        "noise_sd": 0.15
+       }
+      },
+      "scanner_scale": 1.0,
+      "biological_features": {
+       "clin_age": 0.0
+      },
+      "measurement_noise_sd": {
+       "feat_noisy": 2.0
+      }
+     }
+    },
+    {
+     "client_id": "client-02",
+     "data_source": {
+      "kind": "synthetic",
+      "n_participants": 250,
+      "feature_names": [
+       "clin_age",
+       "feat_strong",
+       "feat_copy",
+       "feat_noisy",
+       "feat_mixed",
+       "feat_moderate",
+       "feat_n01",
+       "feat_n02",
+       "feat_n03",
+       "feat_n04",
+       "feat_n05",
+       "feat_n06",
+       "feat_n07",
+       "feat_n08",
+       "feat_n09",
+       "feat_n10"
+      ],
+      "log_hazard_effects": {
+       "feat_strong": 0.8,
+       "feat_noisy": 0.8,
+       "feat_mixed": -0.9,
+       "feat_moderate": 0.4,
+       "clin_age": 0.3
+      },
+      "derived_features": {
+       "feat_copy": {
+        "source": "feat_strong",
+        "noise_sd": 0.15
+       }
+      },
+      "scanner_scale": 1.8,
+      "biological_features": {
+       "clin_age": 0.4
+      },
+      "measurement_noise_sd": {
+       "feat_noisy": 2.0
+      }
+     }
+    },
+    {
+     "client_id": "client-03",
+     "data_source": {
+      "kind": "synthetic",
+      "n_participants": 350,
+      "feature_names": [
+       "clin_age",
+       "feat_strong",
+       "feat_copy",
+       "feat_noisy",
+       "feat_mixed",
+       "feat_moderate",
+       "feat_n01",
+       "feat_n02",
+       "feat_n03",
+       "feat_n04",
+       "feat_n05",
+       "feat_n06",
+       "feat_n07",
+       "feat_n08",
+       "feat_n09",
+       "feat_n10"
+      ],
+      "log_hazard_effects": {
+       "feat_strong": 0.8,
+       "feat_noisy": 0.8,
+       "feat_mixed": -0.9,
+       "feat_moderate": 0.4,
+       "clin_age": 0.3
+      },
+      "derived_features": {
+       "feat_copy": {
+        "source": "feat_strong",
+        "noise_sd": 0.15
+       }
+      },
+      "scanner_scale": 0.6,
+      "biological_features": {
+       "clin_age": 0.8
+      },
+      "measurement_noise_sd": {
+       "feat_noisy": 2.0
+      }
+     }
+    }
+   ]
+  }
+ }
+}

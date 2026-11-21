@@ -20,7 +20,11 @@ class Settings(BaseSettings):
     #: "simulation" spawns the single-machine simulation; "none" disables runs.
     launcher: str = "simulation"
     log_level: str = "INFO"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:8080"]
+    #: When set, every endpoint except /health requires ``Authorization: Bearer <token>``.
+    api_token: str = ""
+    #: Directory of experiment configuration templates offered to the dashboard.
+    templates_dir: str = "experiments/configs"
 
 
 @lru_cache

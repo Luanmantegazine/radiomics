@@ -102,7 +102,7 @@ class FederatedHarmonizationProtocol:
         )
 
     def next_request(self) -> RoundRequest | None:
-        phase = FederatedPhase.INFRASTRUCTURE
+        phase = FederatedPhase.HARMONIZATION
         if self._schema is None:
             return RoundRequest(phase, TaskKind.FEATURE_INVENTORY, None, {},
                                 "schema_intersection")

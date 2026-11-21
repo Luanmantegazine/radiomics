@@ -59,6 +59,7 @@ class FederatedPhase(StrEnum):
     """
 
     INFRASTRUCTURE = "infrastructure"
+    HARMONIZATION = "harmonization"
     FEATURE_SELECTION = "feature_selection"
     TRAINING = "training"
     EVALUATION = "evaluation"

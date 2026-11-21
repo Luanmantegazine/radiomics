@@ -42,8 +42,13 @@ def get_experiment(session: Session, experiment_id: str) -> Experiment:
     return experiment
 
 
-def list_experiments(session: Session) -> list[Experiment]:
-    return list(session.scalars(select(Experiment).order_by(Experiment.created_at.desc())))
+def list_experiments(
+    session: Session, *, status: str | None = None, limit: int = 100, offset: int = 0
+) -> list[Experiment]:
+    query = select(Experiment).order_by(Experiment.created_at.desc())
+    if status:
+        query = query.where(Experiment.status == status)
+    return list(session.scalars(query.limit(limit).offset(offset)))
 
 
 def mark_queued(session: Session, experiment_id: str) -> Experiment:

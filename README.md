@@ -473,7 +473,7 @@ Pure-Python tests run without OASIS data. The integration test uses the two pilo
 
 No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
 
-## Federated framework (MCI → AD conversion) — Stages 1–6
+## Federated framework (MCI → AD conversion) — Stages 1–7
 
 A modular federated radiomics framework is being built alongside the pipeline
 above, in `shared/`, `client/`, `coordinator/`, `backend/`, `evaluation/`,
@@ -491,13 +491,15 @@ contributions, on a training partition held apart from evaluation) and Stage 6
 (federated ComBat harmonization with site-effect assessment, and distributed
 evaluation: time-dependent AUC and C, IPCW Brier score, calibration, decision
 curves, local/federated/reference models and leave-one-site-out external
-validation) are implemented. They have been tested on synthetic data and
+validation) and Stage 7 (consolidated API with migrations, optional token,
+reports; React dashboard; Docker Compose stack with PostgreSQL, MLflow, API and
+dashboard) are implemented. They have been tested on synthetic data and
 phantoms only.
 
 See [etapa-1](docs/arquitetura/etapa-1.md), [etapa-2](docs/arquitetura/etapa-2.md)
 [etapa-3](docs/arquitetura/etapa-3.md), [etapa-4](docs/arquitetura/etapa-4.md),
-[etapa-5](docs/arquitetura/etapa-5.md) and [etapa-6](docs/arquitetura/etapa-6.md)
-in `docs/arquitetura/`. It uses its own
+[etapa-5](docs/arquitetura/etapa-5.md), [etapa-6](docs/arquitetura/etapa-6.md)
+and [etapa-7](docs/arquitetura/etapa-7.md) in `docs/arquitetura/`. It uses its own
 Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
 `requirements.txt`:
 
@@ -505,4 +507,11 @@ Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
 uv sync --extra backend --extra dev --extra imaging --extra science
 uv run pytest tests/federated
 uv run python -m experiments.run_simulation --config experiments/configs/stage1_simulation.yaml
+```
+
+Full stack (PostgreSQL, MLflow, API, dashboard at http://localhost:8080):
+
+```bash
+cp infrastructure/.env.example infrastructure/.env
+docker compose -f infrastructure/docker-compose.yml up --build
 ```
