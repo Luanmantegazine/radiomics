@@ -1,0 +1,22 @@
+# Reliability study based on controlled processing variations - version 1.
+#
+# These perturbations measure robustness to segmentation and discretisation
+# choices. They are NOT a substitute for test-retest scans or for a second
+# segmentation; add an `alternative_manifest` family when those exist.
+# Radii and bin widths below are starting points, not validated choices.
+schema_version: 1
+study_id: reliability-perturbation-v1
+# Two-way, absolute agreement, single measurement.
+icc_form: icc2
+confidence_level: 0.95
+min_subjects: 10
+
+families:
+  - name: segmentation_morphology
+    conditions:
+      - {kind: mask_morphology, name: erode_1, operation: erode, radius_voxels: 1}
+      - {kind: mask_morphology, name: dilate_1, operation: dilate, radius_voxels: 1}
+  - name: discretisation
+    conditions:
+      - {kind: settings_override, name: bin_width_20, settings: {binWidth: 20}}
+      - {kind: settings_override, name: bin_width_30, settings: {binWidth: 30}}

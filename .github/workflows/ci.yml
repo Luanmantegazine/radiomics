@@ -1,0 +1,78 @@
+# Federated framework: tests, dashboard build and container images.
+# (The legacy OASIS-3 pipeline tests need their own pinned environment and are
+# not part of this workflow.)
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.32"
+          python-version: "3.12"
+      - name: Install (locked)
+        run: >
+          uv sync --frozen --extra backend --extra dev --extra imaging --extra science
+          --extra site --extra coordinator
+      - name: Lint
+        run: >
+          uv run ruff check shared client coordinator backend experiments evaluation
+          harmonization tests/federated
+      - name: Tests
+        env:
+          MLFLOW_DISABLE_TELEMETRY: "true"
+          DO_NOT_TRACK: "true"
+        run: uv run pytest tests/federated -p no:cacheprovider
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  images:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Backend image
+        run: docker build -f infrastructure/docker/backend.Dockerfile -t fedradiomics-backend .
+      - name: MLflow image
+        run: docker build -f infrastructure/docker/mlflow.Dockerfile -t fedradiomics-mlflow .
+      - name: Dashboard image
+        run: docker build -t fedradiomics-frontend frontend
+      - name: Compose files are valid
+        env:
+          POSTGRES_PASSWORD: ci-only
+          EXPERIMENT_ID: ci
+        run: |
+          docker compose -f infrastructure/docker-compose.yml config -q
+          docker compose -f infrastructure/docker-compose.yml \
+            -f infrastructure/distributed/docker-compose.sites.yml --profile sites config -q

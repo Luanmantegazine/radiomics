@@ -1,0 +1,86 @@
+# Federated radiomics framework (MCI -> AD conversion).
+#
+# This file governs the federated framework packages only (shared/, client/,
+# coordinator/, backend/, evaluation/, experiments/). The pre-existing OASIS-3
+# acquisition pipeline keeps its own pinned environment in requirements.txt.
+#
+# Exact, reproducible versions are frozen in uv.lock (`uv sync --frozen`).
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fedradiomics"
+version = "0.1.0"
+description = "Federated radiomic feature selection and prognostic modelling framework"
+requires-python = ">=3.12,<3.13"
+# Core: needed by every component (contracts, configuration, logging).
+dependencies = [
+    "pydantic>=2.7,<3",
+    "PyYAML>=6.0,<7",
+    "numpy>=1.26.4,<2",   # <2: PyRadiomics 3.0.1 segfaults with NumPy 2.x (see requirements.txt)
+    "structlog>=24.1,<26",
+]
+
+[project.optional-dependencies]
+# Central backend: REST API, persistence, experiment tracking.
+backend = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "SQLAlchemy>=2.0.30,<3",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic-settings>=2.3,<3",
+    "mlflow-skinny>=2.16,<4",
+    "alembic>=1.13,<2",          # schema migrations (also used by the MLflow SQL store)
+    "jinja2>=3.1,<4",            # HTML reports
+]
+# Site agent of a distributed deployment (Stage 8): outbound HTTPS only.
+site = ["httpx>=0.27,<1"]
+# Coordinator endpoints of a distributed deployment (Stage 8).
+coordinator = ["fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1"]
+# Radiomic pipeline of the federated clients (Stage 2).
+#
+# PyRadiomics is pinned to the exact commit of the v3.1.0 tag and built from
+# git: the 3.0.1 sdist cannot be built on Python 3.12 (its bundled versioneer
+# uses the removed configparser.SafeConfigParser) and the 3.1.0 sdist on PyPI
+# is missing C headers. Feature values therefore come from a different
+# PyRadiomics release than the legacy OASIS-3 pipeline (3.0.1): tables from
+# the two pipelines must not be mixed without re-validation.
+imaging = [
+    "pyradiomics @ git+https://github.com/AIM-Harvard/pyradiomics@6a761c4eb01905cfcb1139b0b158547c55edd4df",
+    "SimpleITK>=2.3,<3",
+    "nibabel>=5.0,<6",   # raw NIfTI access: ITK's reader silently zeroes NaN/Inf
+    "pandas>=2.0,<3",
+]
+# Reliability, relevance, redundancy and selection (Stage 3); survival models later.
+science = [
+    "scipy>=1.10,<2",
+    "scikit-learn>=1.4,<2",
+    "scikit-survival>=0.23,<1",
+]
+# Flower transport adapter (planned for Stage 4, see docs/arquitetura).
+flower = ["flwr>=1.10,<2"]
+dev = [
+    "pytest>=8,<9",
+    "httpx>=0.27,<1",   # FastAPI TestClient
+    "ruff>=0.5",
+    "neuroCombat>=0.2.12,<0.3",   # reference implementation for the ComBat tests only
+]
+
+[tool.uv.extra-build-dependencies]
+# PyRadiomics imports NumPy in setup.py without declaring it.
+pyradiomics = ["numpy==1.26.4", "setuptools>=69", "wheel", "cython<3.1", "versioneer"]
+
+[tool.setuptools.packages.find]
+include = ["shared*", "client*", "coordinator*", "backend*", "evaluation*", "experiments*",
+           "harmonization*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["dataset ", "oasis_analysis", "tests/test_*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]  # FastAPI Depends() in defaults

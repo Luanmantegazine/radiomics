@@ -1,0 +1,4023 @@
+{
+  "components": {
+    "schemas": {
+      "AgreementCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "enum": [
+              "i_squared",
+              "sign_consistency"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "min_value": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Min Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "method",
+          "min_value"
+        ],
+        "title": "AgreementCriterion",
+        "type": "object"
+      },
+      "ClientCost": {
+        "properties": {
+          "bytes_received": {
+            "title": "Bytes Received",
+            "type": "number"
+          },
+          "bytes_sent": {
+            "title": "Bytes Sent",
+            "type": "number"
+          },
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "local_execution_s": {
+            "title": "Local Execution S",
+            "type": "number"
+          },
+          "peak_memory_bytes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Peak Memory Bytes"
+          },
+          "rounds": {
+            "title": "Rounds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "client_id",
+          "rounds",
+          "bytes_sent",
+          "bytes_received",
+          "local_execution_s",
+          "peak_memory_bytes"
+        ],
+        "title": "ClientCost",
+        "type": "object"
+      },
+      "ClientOut": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "registered_at": {
+            "format": "date-time",
+            "title": "Registered At",
+            "type": "string"
+          },
+          "software": {
+            "additionalProperties": true,
+            "title": "Software",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "client_id",
+          "status",
+          "reason_code",
+          "data_origin",
+          "software",
+          "registered_at"
+        ],
+        "title": "ClientOut",
+        "type": "object"
+      },
+      "CostOut": {
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "round_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Round Id"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "round_id",
+          "scope",
+          "client_id",
+          "metric",
+          "value",
+          "unit"
+        ],
+        "title": "CostOut",
+        "type": "object"
+      },
+      "CostSummary": {
+        "properties": {
+          "by_client": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCost"
+            },
+            "title": "By Client",
+            "type": "array"
+          },
+          "by_phase": {
+            "items": {
+              "$ref": "#/components/schemas/PhaseCost"
+            },
+            "title": "By Phase",
+            "type": "array"
+          },
+          "by_round": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "By Round",
+            "type": "array"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "totals": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Totals",
+            "type": "object"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "totals",
+          "by_phase",
+          "by_client",
+          "by_round"
+        ],
+        "title": "CostSummary",
+        "type": "object"
+      },
+      "CoxSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "cox",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z0-9_]{1,48}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "optimizer": {
+            "$ref": "#/components/schemas/OptimizerSpec"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "optimizer"
+        ],
+        "title": "CoxSpec",
+        "type": "object"
+      },
+      "DataOrigin": {
+        "description": "Provenance of the data behind a result. Synthetic results are never science.",
+        "enum": [
+          "synthetic",
+          "real"
+        ],
+        "title": "DataOrigin",
+        "type": "string"
+      },
+      "DataSplitSpec": {
+        "additionalProperties": false,
+        "description": "Per-site split into a training and a held-out test partition.\n\nFeature selection and model fitting only ever see the training partition;\nthe test partition is reserved for evaluation (Stage 6).",
+        "properties": {
+          "seed": {
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "test_fraction": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Test Fraction",
+            "type": "number"
+          }
+        },
+        "required": [
+          "test_fraction",
+          "seed"
+        ],
+        "title": "DataSplitSpec",
+        "type": "object"
+      },
+      "DerivedFeatureSpec": {
+        "additionalProperties": false,
+        "description": "A synthetic feature equal to another one plus independent noise.",
+        "properties": {
+          "noise_sd": {
+            "minimum": 0.0,
+            "title": "Noise Sd",
+            "type": "number"
+          },
+          "source": {
+            "pattern": "^[A-Za-z0-9_.\\-]{1,128}$",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "noise_sd"
+        ],
+        "title": "DerivedFeatureSpec",
+        "type": "object"
+      },
+      "DimensionWeights": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "minimum": 0.0,
+            "title": "Agreement",
+            "type": "number"
+          },
+          "relevance": {
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "reliability": {
+            "minimum": 0.0,
+            "title": "Reliability",
+            "type": "number"
+          }
+        },
+        "required": [
+          "reliability",
+          "relevance",
+          "agreement"
+        ],
+        "title": "DimensionWeights",
+        "type": "object"
+      },
+      "EvaluationConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration_bins": {
+            "maximum": 100.0,
+            "minimum": 2.0,
+            "title": "Calibration Bins",
+            "type": "integer"
+          },
+          "decision_thresholds": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Decision Thresholds",
+            "type": "array"
+          },
+          "external_validation": {
+            "enum": [
+              "none",
+              "leave_one_site_out"
+            ],
+            "title": "External Validation",
+            "type": "string"
+          },
+          "local_models": {
+            "title": "Local Models",
+            "type": "boolean"
+          },
+          "partition": {
+            "enum": [
+              "test",
+              "all"
+            ],
+            "title": "Partition",
+            "type": "string"
+          },
+          "release_site_metrics": {
+            "title": "Release Site Metrics",
+            "type": "boolean"
+          },
+          "site_baseline_variant": {
+            "title": "Site Baseline Variant",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "partition",
+          "calibration_bins",
+          "decision_thresholds",
+          "site_baseline_variant",
+          "local_models",
+          "release_site_metrics",
+          "external_validation"
+        ],
+        "title": "EvaluationConfig",
+        "type": "object"
+      },
+      "EvaluationOut": {
+        "properties": {
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationRow"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "data_origin",
+          "evaluations"
+        ],
+        "title": "EvaluationOut",
+        "type": "object"
+      },
+      "EvaluationRow": {
+        "properties": {
+          "feature_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Names",
+            "type": "array"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "n_clients": {
+            "title": "N Clients",
+            "type": "integer"
+          },
+          "pooled": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsSummary"
+            },
+            "title": "Pooled",
+            "type": "array"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "sites": {
+            "items": {
+              "$ref": "#/components/schemas/SiteMetrics"
+            },
+            "title": "Sites",
+            "type": "array"
+          },
+          "variant": {
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_name",
+          "variant",
+          "scope",
+          "n_clients",
+          "feature_names",
+          "pooled",
+          "sites"
+        ],
+        "title": "EvaluationRow",
+        "type": "object"
+      },
+      "ExperimentConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "data_origin": {
+            "$ref": "#/components/schemas/DataOrigin"
+          },
+          "data_split": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataSplitSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Description",
+            "type": "string"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_clients": {
+            "items": {
+              "pattern": "^client-[a-z0-9]{2,32}$",
+              "type": "string"
+            },
+            "minItems": 2,
+            "title": "Expected Clients",
+            "type": "array"
+          },
+          "feature_selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FederatedSelectionConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "harmonization": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HarmonizationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "pattern": "^[A-Za-z0-9_.+\\-]{1,64}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "privacy": {
+            "$ref": "#/components/schemas/PrivacyPolicy"
+          },
+          "protocol_version": {
+            "default": "1.4",
+            "pattern": "^[A-Za-z0-9_.+\\-]{1,64}$",
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "rounds": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RoundSpec"
+            },
+            "title": "Rounds",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "seed": {
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "simulation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SimulationSpec"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "training": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TrainingConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "seed",
+          "data_origin",
+          "expected_clients"
+        ],
+        "title": "ExperimentConfig",
+        "type": "object"
+      },
+      "ExperimentDetail": {
+        "properties": {
+          "code_version": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mlflow_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Run Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outcome_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Digest"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "data_origin",
+          "protocol_version",
+          "seed",
+          "config_hash",
+          "mlflow_run_id",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "config"
+        ],
+        "title": "ExperimentDetail",
+        "type": "object"
+      },
+      "ExperimentOut": {
+        "properties": {
+          "code_version": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mlflow_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Run Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outcome_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Digest"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "status",
+          "data_origin",
+          "protocol_version",
+          "seed",
+          "config_hash",
+          "mlflow_run_id",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "ExperimentOut",
+        "type": "object"
+      },
+      "ExperimentSummary": {
+        "properties": {
+          "available_results": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Available Results",
+            "type": "object"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration S"
+          },
+          "experiment": {
+            "$ref": "#/components/schemas/ExperimentOut"
+          },
+          "planned_phases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Planned Phases",
+            "type": "array"
+          },
+          "registered_clients": {
+            "title": "Registered Clients",
+            "type": "integer"
+          },
+          "rejected_clients": {
+            "title": "Rejected Clients",
+            "type": "integer"
+          },
+          "rounds": {
+            "$ref": "#/components/schemas/RoundCounts"
+          },
+          "total_bytes": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Bytes"
+          }
+        },
+        "required": [
+          "experiment",
+          "registered_clients",
+          "rejected_clients",
+          "rounds",
+          "planned_phases",
+          "available_results",
+          "total_bytes",
+          "duration_s"
+        ],
+        "title": "ExperimentSummary",
+        "type": "object"
+      },
+      "ExplicitFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "names"
+        ],
+        "title": "ExplicitFeatures",
+        "type": "object"
+      },
+      "FeatureSelectionOut": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_pool_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Pool Size"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "jaccard_between_strategies": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Jaccard Between Strategies",
+            "type": "object"
+          },
+          "n_clients": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "N Clients",
+            "type": "object"
+          },
+          "n_features_considered": {
+            "title": "N Features Considered",
+            "type": "integer"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyResult"
+            },
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "n_clients",
+          "n_features_considered",
+          "candidate_pool_size",
+          "strategies",
+          "jaccard_between_strategies",
+          "experiment_id",
+          "data_origin"
+        ],
+        "title": "FeatureSelectionOut",
+        "type": "object"
+      },
+      "FeatureTableSourceSpec": {
+        "additionalProperties": false,
+        "description": "Feature table produced by the site's local radiomic pipeline (Stage 2).",
+        "properties": {
+          "data_origin": {
+            "$ref": "#/components/schemas/DataOrigin"
+          },
+          "features_path": {
+            "title": "Features Path",
+            "type": "string"
+          },
+          "kind": {
+            "const": "feature_table",
+            "default": "feature_table",
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_path": {
+            "title": "Manifest Path",
+            "type": "string"
+          },
+          "reliability_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability Path"
+          }
+        },
+        "required": [
+          "features_path",
+          "manifest_path",
+          "data_origin"
+        ],
+        "title": "FeatureTableSourceSpec",
+        "type": "object"
+      },
+      "FederatedPhase": {
+        "description": "Kind of federated activity a round belongs to.\n\nThe three scientific phases are kept separate because they need different\naggregation strategies. ``INFRASTRUCTURE`` is the only phase with tasks\nimplemented in Stage 1.",
+        "enum": [
+          "infrastructure",
+          "harmonization",
+          "feature_selection",
+          "training",
+          "evaluation"
+        ],
+        "title": "FederatedPhase",
+        "type": "string"
+      },
+      "FederatedSelectionConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "leave_one_site_out": {
+            "title": "Leave One Site Out",
+            "type": "boolean"
+          },
+          "redundancy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RedundancyRound"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reliability_column": {
+            "anyOf": [
+              {
+                "enum": [
+                  "min_icc",
+                  "min_ci_low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability Column"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/SelectionStrategy"
+            },
+            "minItems": 1,
+            "title": "Strategies",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reliability_column",
+          "redundancy",
+          "strategies",
+          "leave_one_site_out"
+        ],
+        "title": "FederatedSelectionConfig",
+        "type": "object"
+      },
+      "FromStrategy": {
+        "additionalProperties": false,
+        "properties": {
+          "from_strategy": {
+            "pattern": "^[a-z0-9_]{1,48}$",
+            "title": "From Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_strategy"
+        ],
+        "title": "FromStrategy",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HarmonizationConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "covariates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covariates",
+            "type": "array"
+          },
+          "eb_tolerance": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Eb Tolerance",
+            "type": "number"
+          },
+          "empirical_bayes": {
+            "title": "Empirical Bayes",
+            "type": "boolean"
+          },
+          "method": {
+            "enum": [
+              "none",
+              "combat"
+            ],
+            "title": "Method",
+            "type": "string"
+          },
+          "release_site_summaries": {
+            "title": "Release Site Summaries",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "method",
+          "covariates",
+          "empirical_bayes",
+          "eb_tolerance",
+          "release_site_summaries"
+        ],
+        "title": "HarmonizationConfig",
+        "type": "object"
+      },
+      "HarmonizationOut": {
+        "additionalProperties": false,
+        "properties": {
+          "covariate_eta_squared": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Covariate Eta Squared",
+            "type": "object"
+          },
+          "covariates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covariates",
+            "type": "array"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "event_rate_chi2": {
+            "title": "Event Rate Chi2",
+            "type": "number"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "follow_up_range_months": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Range Months"
+          },
+          "harmonized_features": {
+            "title": "Harmonized Features",
+            "type": "integer"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "n_clients": {
+            "title": "N Clients",
+            "type": "integer"
+          },
+          "site_effect_after": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Site Effect After"
+          },
+          "site_effect_before": {
+            "additionalProperties": true,
+            "title": "Site Effect Before",
+            "type": "object"
+          },
+          "sites": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SiteProfile"
+            },
+            "title": "Sites",
+            "type": "array"
+          }
+        },
+        "required": [
+          "method",
+          "covariates",
+          "n_clients",
+          "harmonized_features",
+          "site_effect_before",
+          "site_effect_after",
+          "covariate_eta_squared",
+          "event_rate_chi2",
+          "follow_up_range_months",
+          "experiment_id",
+          "data_origin"
+        ],
+        "title": "HarmonizationOut",
+        "type": "object"
+      },
+      "HorizonLogisticSpec": {
+        "additionalProperties": false,
+        "description": "Comparator: one logistic regression per horizon.\n\n``ipcw`` weights participants by the inverse probability of remaining\nuncensored; ``complete_case`` drops those censored before the horizon\n(known to be biased, kept as a reference). Neither ever labels a\nparticipant censored at or before the horizon as a non-converter.",
+        "properties": {
+          "censoring": {
+            "enum": [
+              "ipcw",
+              "complete_case"
+            ],
+            "title": "Censoring",
+            "type": "string"
+          },
+          "intercept": {
+            "enum": [
+              "common",
+              "site_specific"
+            ],
+            "title": "Intercept",
+            "type": "string"
+          },
+          "kind": {
+            "const": "horizon_logistic",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "pattern": "^[a-z0-9_]{1,48}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "optimizer": {
+            "$ref": "#/components/schemas/OptimizerSpec"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "censoring",
+          "intercept",
+          "optimizer"
+        ],
+        "title": "HorizonLogisticSpec",
+        "type": "object"
+      },
+      "LeaveOneSiteOut": {
+        "additionalProperties": false,
+        "properties": {
+          "mean_jaccard_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Jaccard To Full"
+          },
+          "nogueira_stability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nogueira Stability"
+          },
+          "selections": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Selections",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "LeaveOneSiteOut",
+        "type": "object"
+      },
+      "MetricsSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "auc": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auc"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "brier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brier"
+          },
+          "c_index": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "C Index"
+          },
+          "calibration": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Calibration",
+            "type": "array"
+          },
+          "calibration_error": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Error"
+          },
+          "decision_curve": {
+            "default": [],
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Decision Curve",
+            "type": "array"
+          },
+          "horizon_months": {
+            "title": "Horizon Months",
+            "type": "number"
+          },
+          "n": {
+            "default": 0,
+            "title": "N",
+            "type": "integer"
+          },
+          "n_events": {
+            "default": 0,
+            "title": "N Events",
+            "type": "integer"
+          },
+          "o_e": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "O E"
+          },
+          "observed_incidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Incidence"
+          },
+          "scaled_brier": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scaled Brier"
+          }
+        },
+        "required": [
+          "horizon_months",
+          "available"
+        ],
+        "title": "MetricsSummary",
+        "type": "object"
+      },
+      "ModelDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "feature_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Names",
+            "type": "array"
+          },
+          "features_source": {
+            "title": "Features Source",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "mlflow_model_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Model Uri"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameters"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "experiment_id",
+          "name",
+          "kind",
+          "status",
+          "failure_reason",
+          "features_source",
+          "feature_names",
+          "mlflow_model_uri",
+          "created_at",
+          "parameters"
+        ],
+        "title": "ModelDetail",
+        "type": "object"
+      },
+      "ModelEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "features": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FromStrategy"
+              },
+              {
+                "$ref": "#/components/schemas/ExplicitFeatures"
+              }
+            ],
+            "title": "Features"
+          },
+          "model": {
+            "discriminator": {
+              "mapping": {
+                "cox": "#/components/schemas/CoxSpec",
+                "horizon_logistic": "#/components/schemas/HorizonLogisticSpec",
+                "random_survival_forest": "#/components/schemas/RandomSurvivalForestSpec"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CoxSpec"
+              },
+              {
+                "$ref": "#/components/schemas/HorizonLogisticSpec"
+              },
+              {
+                "$ref": "#/components/schemas/RandomSurvivalForestSpec"
+              }
+            ],
+            "title": "Model"
+          }
+        },
+        "required": [
+          "model",
+          "features"
+        ],
+        "title": "ModelEntry",
+        "type": "object"
+      },
+      "ModelOut": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "feature_names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Feature Names",
+            "type": "array"
+          },
+          "features_source": {
+            "title": "Features Source",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "mlflow_model_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mlflow Model Uri"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "experiment_id",
+          "name",
+          "kind",
+          "status",
+          "failure_reason",
+          "features_source",
+          "feature_names",
+          "mlflow_model_uri",
+          "created_at"
+        ],
+        "title": "ModelOut",
+        "type": "object"
+      },
+      "OptimizerSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "max_iterations": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Iterations",
+            "type": "integer"
+          },
+          "ridge": {
+            "minimum": 0.0,
+            "title": "Ridge",
+            "type": "number"
+          },
+          "tolerance": {
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Tolerance",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ridge",
+          "max_iterations",
+          "tolerance"
+        ],
+        "title": "OptimizerSpec",
+        "type": "object"
+      },
+      "ParticipationOut": {
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "n_samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Samples"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "status",
+          "reason_code",
+          "n_samples"
+        ],
+        "title": "ParticipationOut",
+        "type": "object"
+      },
+      "PhaseCost": {
+        "properties": {
+          "aggregation_s": {
+            "title": "Aggregation S",
+            "type": "number"
+          },
+          "bytes_from_clients": {
+            "title": "Bytes From Clients",
+            "type": "number"
+          },
+          "bytes_to_clients": {
+            "title": "Bytes To Clients",
+            "type": "number"
+          },
+          "communication_s": {
+            "title": "Communication S",
+            "type": "number"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "round_time_s": {
+            "title": "Round Time S",
+            "type": "number"
+          },
+          "rounds": {
+            "title": "Rounds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "phase",
+          "rounds",
+          "bytes_from_clients",
+          "bytes_to_clients",
+          "communication_s",
+          "aggregation_s",
+          "round_time_s"
+        ],
+        "title": "PhaseCost",
+        "type": "object"
+      },
+      "PrivacyPolicy": {
+        "additionalProperties": false,
+        "description": "Disclosure-control thresholds, distributed with every round.",
+        "properties": {
+          "min_clients_per_aggregate": {
+            "default": 2,
+            "minimum": 2.0,
+            "title": "Min Clients Per Aggregate",
+            "type": "integer"
+          },
+          "min_cohort_size": {
+            "default": 10,
+            "minimum": 2.0,
+            "title": "Min Cohort Size",
+            "type": "integer"
+          },
+          "min_events": {
+            "default": 5,
+            "minimum": 1.0,
+            "title": "Min Events",
+            "type": "integer"
+          }
+        },
+        "title": "PrivacyPolicy",
+        "type": "object"
+      },
+      "RandomSurvivalForestSpec": {
+        "additionalProperties": false,
+        "description": "Example of another survival model behind the same interface (local only).",
+        "properties": {
+          "kind": {
+            "const": "random_survival_forest",
+            "title": "Kind",
+            "type": "string"
+          },
+          "min_samples_leaf": {
+            "minimum": 1.0,
+            "title": "Min Samples Leaf",
+            "type": "integer"
+          },
+          "n_estimators": {
+            "minimum": 10.0,
+            "title": "N Estimators",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z0-9_]{1,48}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "seed": {
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "n_estimators",
+          "min_samples_leaf",
+          "seed"
+        ],
+        "title": "RandomSurvivalForestSpec",
+        "type": "object"
+      },
+      "RedundancyRound": {
+        "additionalProperties": false,
+        "properties": {
+          "correlation": {
+            "enum": [
+              "pearson",
+              "spearman"
+            ],
+            "title": "Correlation",
+            "type": "string"
+          },
+          "max_candidates": {
+            "maximum": 200.0,
+            "minimum": 2.0,
+            "title": "Max Candidates",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "correlation",
+          "max_candidates"
+        ],
+        "title": "RedundancyRound",
+        "type": "object"
+      },
+      "RelevanceCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregation": {
+            "enum": [
+              "stratified_score",
+              "stouffer",
+              "mean_rank"
+            ],
+            "title": "Aggregation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "aggregation"
+        ],
+        "title": "RelevanceCriterion",
+        "type": "object"
+      },
+      "ReliabilityCriterion": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregation": {
+            "enum": [
+              "minimum",
+              "weighted_mean"
+            ],
+            "title": "Aggregation",
+            "type": "string"
+          },
+          "min_value": {
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Min Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "aggregation",
+          "min_value"
+        ],
+        "title": "ReliabilityCriterion",
+        "type": "object"
+      },
+      "ResultsOut": {
+        "properties": {
+          "config_hash": {
+            "title": "Config Hash",
+            "type": "string"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/RoundResult"
+            },
+            "title": "Rounds",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "experiment_id",
+          "status",
+          "data_origin",
+          "config_hash",
+          "rounds"
+        ],
+        "title": "ResultsOut",
+        "type": "object"
+      },
+      "RoundCounts": {
+        "properties": {
+          "by_phase": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Phase",
+            "type": "object"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "failed",
+          "by_phase"
+        ],
+        "title": "RoundCounts",
+        "type": "object"
+      },
+      "RoundDetail": {
+        "properties": {
+          "aggregator": {
+            "title": "Aggregator",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "participations": {
+            "items": {
+              "$ref": "#/components/schemas/ParticipationOut"
+            },
+            "title": "Participations",
+            "type": "array"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "round_number": {
+            "title": "Round Number",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "experiment_id",
+          "round_number",
+          "phase",
+          "task",
+          "aggregator",
+          "status",
+          "failure_reason",
+          "finished_at",
+          "participations"
+        ],
+        "title": "RoundDetail",
+        "type": "object"
+      },
+      "RoundOut": {
+        "properties": {
+          "aggregator": {
+            "title": "Aggregator",
+            "type": "string"
+          },
+          "experiment_id": {
+            "title": "Experiment Id",
+            "type": "string"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "finished_at": {
+            "format": "date-time",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "round_number": {
+            "title": "Round Number",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "experiment_id",
+          "round_number",
+          "phase",
+          "task",
+          "aggregator",
+          "status",
+          "failure_reason",
+          "finished_at"
+        ],
+        "title": "RoundOut",
+        "type": "object"
+      },
+      "RoundResult": {
+        "properties": {
+          "aggregate": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate"
+          },
+          "aggregator": {
+            "title": "Aggregator",
+            "type": "string"
+          },
+          "phase": {
+            "title": "Phase",
+            "type": "string"
+          },
+          "round_id": {
+            "title": "Round Id",
+            "type": "string"
+          },
+          "round_number": {
+            "title": "Round Number",
+            "type": "integer"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "task": {
+            "title": "Task",
+            "type": "string"
+          }
+        },
+        "required": [
+          "round_id",
+          "round_number",
+          "phase",
+          "task",
+          "aggregator",
+          "status",
+          "aggregate"
+        ],
+        "title": "RoundResult",
+        "type": "object"
+      },
+      "RoundSpec": {
+        "additionalProperties": false,
+        "description": "One federated round: which local task runs and how results are aggregated.",
+        "properties": {
+          "aggregator": {
+            "pattern": "^[A-Za-z0-9_.+\\-]{1,64}$",
+            "title": "Aggregator",
+            "type": "string"
+          },
+          "params": {
+            "patternProperties": {
+              "^[A-Za-z0-9_.+\\-]{1,64}$": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "title": "Params",
+            "type": "object"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/FederatedPhase"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskKind"
+          }
+        },
+        "required": [
+          "phase",
+          "task",
+          "aggregator"
+        ],
+        "title": "RoundSpec",
+        "type": "object"
+      },
+      "SelectedFeature": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "rank": {
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "ranking_score": {
+            "title": "Ranking Score",
+            "type": "number"
+          },
+          "relevance_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance P"
+          },
+          "relevance_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Z"
+          },
+          "reliability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability"
+          }
+        },
+        "required": [
+          "rank",
+          "feature",
+          "ranking_score",
+          "reliability",
+          "relevance_z",
+          "relevance_p",
+          "agreement"
+        ],
+        "title": "SelectedFeature",
+        "type": "object"
+      },
+      "SelectedFeatureOut": {
+        "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agreement"
+          },
+          "feature": {
+            "title": "Feature",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "ranking_score": {
+            "title": "Ranking Score",
+            "type": "number"
+          },
+          "relevance_p": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance P"
+          },
+          "relevance_z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relevance Z"
+          },
+          "reliability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reliability"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy",
+          "rank",
+          "feature",
+          "ranking_score",
+          "reliability",
+          "relevance_z",
+          "relevance_p",
+          "agreement"
+        ],
+        "title": "SelectedFeatureOut",
+        "type": "object"
+      },
+      "SelectionStrategy": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgreementCriterion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "max_abs_correlation": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Abs Correlation"
+          },
+          "n_features": {
+            "minimum": 1.0,
+            "title": "N Features",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z0-9_]{1,48}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "ranking": {
+            "discriminator": {
+              "mapping": {
+                "sequential": "#/components/schemas/SequentialRanking",
+                "weighted": "#/components/schemas/WeightedRanking"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SequentialRanking"
+              },
+              {
+                "$ref": "#/components/schemas/WeightedRanking"
+              }
+            ],
+            "title": "Ranking"
+          },
+          "relevance": {
+            "$ref": "#/components/schemas/RelevanceCriterion"
+          },
+          "reliability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReliabilityCriterion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "reliability",
+          "relevance",
+          "agreement",
+          "ranking",
+          "max_abs_correlation",
+          "n_features"
+        ],
+        "title": "SelectionStrategy",
+        "type": "object"
+      },
+      "SequentialRanking": {
+        "additionalProperties": false,
+        "description": "Filters on reliability/agreement, then ranks by relevance only.",
+        "properties": {
+          "kind": {
+            "const": "sequential",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "SequentialRanking",
+        "type": "object"
+      },
+      "SimulatedClientSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "pattern": "^client-[a-z0-9]{2,32}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "data_source": {
+            "discriminator": {
+              "mapping": {
+                "feature_table": "#/components/schemas/FeatureTableSourceSpec",
+                "synthetic": "#/components/schemas/SyntheticDataSourceSpec"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SyntheticDataSourceSpec"
+              },
+              {
+                "$ref": "#/components/schemas/FeatureTableSourceSpec"
+              }
+            ],
+            "title": "Data Source"
+          }
+        },
+        "required": [
+          "client_id",
+          "data_source"
+        ],
+        "title": "SimulatedClientSpec",
+        "type": "object"
+      },
+      "SimulationSpec": {
+        "additionalProperties": false,
+        "description": "Single-machine simulation settings.\n\nIn a distributed deployment this section does not exist: each institution\nkeeps its own local data configuration, which the coordinator never sees.",
+        "properties": {
+          "clients": {
+            "items": {
+              "$ref": "#/components/schemas/SimulatedClientSpec"
+            },
+            "minItems": 1,
+            "title": "Clients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "clients"
+        ],
+        "title": "SimulationSpec",
+        "type": "object"
+      },
+      "SiteMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "pattern": "^client-[a-z0-9]{2,32}$",
+            "title": "Client Id",
+            "type": "string"
+          },
+          "horizons": {
+            "items": {
+              "$ref": "#/components/schemas/MetricsSummary"
+            },
+            "title": "Horizons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "client_id",
+          "horizons"
+        ],
+        "title": "SiteMetrics",
+        "type": "object"
+      },
+      "SiteProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "title": "Client Id",
+            "type": "string"
+          },
+          "event_rate": {
+            "title": "Event Rate",
+            "type": "number"
+          },
+          "median_follow_up": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Follow Up"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "client_id",
+          "n",
+          "event_rate",
+          "median_follow_up"
+        ],
+        "title": "SiteProfile",
+        "type": "object"
+      },
+      "StrategyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "excluded_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Excluded Counts",
+            "type": "object"
+          },
+          "failure_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Reason"
+          },
+          "leave_one_site_out": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaveOneSiteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "n_eligible": {
+            "default": 0,
+            "title": "N Eligible",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "selected": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SelectedFeature"
+            },
+            "title": "Selected",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "completed"
+        ],
+        "title": "StrategyResult",
+        "type": "object"
+      },
+      "SyntheticDataSourceSpec": {
+        "additionalProperties": false,
+        "description": "Synthetic local dataset. For infrastructure tests only, never for science.",
+        "properties": {
+          "biological_features": {
+            "patternProperties": {
+              "^[A-Za-z0-9_.\\-]{1,128}$": {
+                "type": "number"
+              }
+            },
+            "title": "Biological Features",
+            "type": "object"
+          },
+          "derived_features": {
+            "patternProperties": {
+              "^[A-Za-z0-9_.\\-]{1,128}$": {
+                "$ref": "#/components/schemas/DerivedFeatureSpec"
+              }
+            },
+            "title": "Derived Features",
+            "type": "object"
+          },
+          "feature_names": {
+            "items": {
+              "pattern": "^[A-Za-z0-9_.\\-]{1,128}$",
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Feature Names",
+            "type": "array"
+          },
+          "kind": {
+            "const": "synthetic",
+            "default": "synthetic",
+            "title": "Kind",
+            "type": "string"
+          },
+          "log_hazard_effects": {
+            "patternProperties": {
+              "^[A-Za-z0-9_.\\-]{1,128}$": {
+                "type": "number"
+              }
+            },
+            "title": "Log Hazard Effects",
+            "type": "object"
+          },
+          "measurement_noise_sd": {
+            "anyOf": [
+              {
+                "patternProperties": {
+                  "^[A-Za-z0-9_.\\-]{1,128}$": {
+                    "type": "number"
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Noise Sd"
+          },
+          "n_participants": {
+            "minimum": 1.0,
+            "title": "N Participants",
+            "type": "integer"
+          },
+          "scanner_scale": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Scanner Scale",
+            "type": "number"
+          }
+        },
+        "required": [
+          "n_participants",
+          "feature_names"
+        ],
+        "title": "SyntheticDataSourceSpec",
+        "type": "object"
+      },
+      "TaskKind": {
+        "description": "Local computations a client can be asked to run.",
+        "enum": [
+          "feature_inventory",
+          "feature_summary",
+          "feature_reliability",
+          "feature_relevance",
+          "feature_covariance",
+          "model_update",
+          "baseline_hazard",
+          "site_intercept",
+          "harmonization_statistics",
+          "harmonization_variance",
+          "harmonization_apply",
+          "model_evaluation"
+        ],
+        "title": "TaskKind",
+        "type": "string"
+      },
+      "TemplateOut": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "data_origin": {
+            "title": "Data Origin",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "phases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Phases",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "data_origin",
+          "phases",
+          "config"
+        ],
+        "title": "TemplateOut",
+        "type": "object"
+      },
+      "TrainingConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "horizons_months": {
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "title": "Horizons Months",
+            "type": "array"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEntry"
+            },
+            "minItems": 1,
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "horizons_months",
+          "models"
+        ],
+        "title": "TrainingConfig",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationIssue": {
+        "properties": {
+          "location": {
+            "title": "Location",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "location",
+          "message"
+        ],
+        "title": "ValidationIssue",
+        "type": "object"
+      },
+      "ValidationOut": {
+        "properties": {
+          "config_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config Hash"
+          },
+          "data_origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Origin"
+          },
+          "errors": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "title": "Errors",
+            "type": "array"
+          },
+          "expected_clients": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Expected Clients",
+            "type": "array"
+          },
+          "phases": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Phases",
+            "type": "array"
+          },
+          "valid": {
+            "title": "Valid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid"
+        ],
+        "title": "ValidationOut",
+        "type": "object"
+      },
+      "WeightedRanking": {
+        "additionalProperties": false,
+        "description": "Ranks by a weighted mean of per-dimension percentile ranks.\n\nProvided to *compare* weightings; no weighting is preferred by the code.",
+        "properties": {
+          "kind": {
+            "const": "weighted",
+            "title": "Kind",
+            "type": "string"
+          },
+          "weights": {
+            "$ref": "#/components/schemas/DimensionWeights"
+          }
+        },
+        "required": [
+          "kind",
+          "weights"
+        ],
+        "title": "WeightedRanking",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Experiment management for federated radiomics (MCI -> AD conversion).",
+    "title": "Federated Radiomics API",
+    "version": "0.7.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/clients": {
+      "get": {
+        "description": "Pseudonymised sites and their registration status.",
+        "operationId": "list_clients_clients_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "experiment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Experiment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ClientOut"
+                  },
+                  "title": "Response List Clients Clients Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Clients",
+        "tags": [
+          "clients"
+        ]
+      }
+    },
+    "/experiments": {
+      "get": {
+        "operationId": "list_experiments_experiments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExperimentOut"
+                  },
+                  "title": "Response List Experiments Experiments Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Experiments",
+        "tags": [
+          "experiments"
+        ]
+      },
+      "post": {
+        "description": "Register a new experiment from a validated configuration.",
+        "operationId": "create_experiment_experiments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/experiments/templates": {
+      "get": {
+        "description": "Versioned experiment configurations shipped with the code.",
+        "operationId": "get_templates_experiments_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateOut"
+                  },
+                  "title": "Response Get Templates Experiments Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Templates",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/experiments/validate": {
+      "post": {
+        "description": "Validate a candidate configuration without creating anything.",
+        "operationId": "validate_configuration_experiments_validate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Config",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Configuration",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/experiments/{experiment_id}": {
+      "get": {
+        "operationId": "get_experiment_experiments__experiment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/experiments/{experiment_id}/run": {
+      "post": {
+        "description": "Trigger the federated run asynchronously; poll the experiment for status.",
+        "operationId": "run_experiment_experiments__experiment_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Experiment",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/experiments/{experiment_id}/summary": {
+      "get": {
+        "description": "Progress and available result sections (for the dashboard).",
+        "operationId": "get_summary_experiments__experiment_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Summary",
+        "tags": [
+          "experiments"
+        ]
+      }
+    },
+    "/federated-rounds": {
+      "get": {
+        "operationId": "list_rounds_federated_rounds_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "experiment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Experiment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoundOut"
+                  },
+                  "title": "Response List Rounds Federated Rounds Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Rounds",
+        "tags": [
+          "federated-rounds"
+        ]
+      }
+    },
+    "/federated-rounds/{round_id}": {
+      "get": {
+        "operationId": "get_round_federated_rounds__round_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "round_id",
+            "required": true,
+            "schema": {
+              "title": "Round Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoundDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Round",
+        "tags": [
+          "federated-rounds"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/models": {
+      "get": {
+        "description": "Trained models (status, features). Parameters: ``/models/{id}``.",
+        "operationId": "list_models_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "experiment_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Experiment Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelOut"
+                  },
+                  "title": "Response List Models Models Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/models/{model_id}": {
+      "get": {
+        "description": "Released model: global coefficients, standardisation, baseline, diagnostics.",
+        "operationId": "get_model_models__model_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "title": "Model Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Model",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/reports/{experiment_id}": {
+      "get": {
+        "description": "Full report of an experiment: JSON bundle or self-contained HTML page.",
+        "operationId": "export_report_reports__experiment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "json",
+              "enum": [
+                "json",
+                "html"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "download",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Download",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Report",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/reports/{experiment_id}/{table}.csv": {
+      "get": {
+        "description": "One result table as CSV: evaluation, selected-features, models, costs, rounds.",
+        "operationId": "export_table_reports__experiment_id___table__csv_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "table",
+            "required": true,
+            "schema": {
+              "title": "Table",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Table",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/results/{experiment_id}": {
+      "get": {
+        "description": "Global aggregates per round (never per-client statistics).",
+        "operationId": "get_results_results__experiment_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Results",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/costs": {
+      "get": {
+        "description": "Computational and communication costs recorded for an experiment.",
+        "operationId": "get_costs_results__experiment_id__costs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CostOut"
+                  },
+                  "title": "Response Get Costs Results  Experiment Id  Costs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Costs",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/costs/summary": {
+      "get": {
+        "description": "Costs grouped by phase, client and round.",
+        "operationId": "get_cost_summary_results__experiment_id__costs_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CostSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Cost Summary",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/evaluation": {
+      "get": {
+        "description": "Pooled (site-stratified) metrics per model, variant and scope.",
+        "operationId": "get_evaluation_results__experiment_id__evaluation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Evaluation",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/feature-selection": {
+      "get": {
+        "description": "Released federated selection result: strategies, selections, stability.",
+        "operationId": "get_feature_selection_results__experiment_id__feature_selection_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeatureSelectionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Feature Selection",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/harmonization": {
+      "get": {
+        "description": "Site effects before/after harmonization and clinical differences between sites.",
+        "operationId": "get_harmonization_results__experiment_id__harmonization_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HarmonizationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Harmonization",
+        "tags": [
+          "results"
+        ]
+      }
+    },
+    "/results/{experiment_id}/selected-features": {
+      "get": {
+        "operationId": "get_selected_features_results__experiment_id__selected_features_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "experiment_id",
+            "required": true,
+            "schema": {
+              "title": "Experiment Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "strategy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Strategy"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SelectedFeatureOut"
+                  },
+                  "title": "Response Get Selected Features Results  Experiment Id  Selected Features Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Selected Features",
+        "tags": [
+          "results"
+        ]
+      }
+    }
+  }
+}

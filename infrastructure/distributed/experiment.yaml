@@ -1,0 +1,184 @@
+# Distributed demo: the Stage 6 pipeline, with each site in its own container.
+# SYNTHETIC DATA - infrastructure demonstration only. There is no `simulation`
+# section: each site keeps its own data configuration (site-0X.yaml).
+schema_version: 1
+name: stage8-distributed-demo
+description: Stage 6 pipeline run over HTTP with three site containers (synthetic data).
+seed: 20261118
+data_split:
+  test_fraction: 0.3
+  seed: 7
+data_origin: synthetic
+privacy:
+  min_cohort_size: 10
+  min_clients_per_aggregate: 2
+  min_events: 5
+expected_clients:
+- client-01
+- client-02
+- client-03
+feature_selection:
+  reliability_column: min_icc
+  redundancy:
+    correlation: spearman
+    max_candidates: 20
+  leave_one_site_out: true
+  strategies:
+  - name: sequential_stratified
+    reliability:
+      aggregation: minimum
+      min_value: 0.75
+    relevance:
+      aggregation: stratified_score
+    agreement:
+      method: i_squared
+      min_value: 0.5
+    ranking:
+      kind: sequential
+    max_abs_correlation: 0.8
+    n_features: 3
+  - name: sequential_stouffer
+    reliability:
+      aggregation: minimum
+      min_value: 0.75
+    relevance:
+      aggregation: stouffer
+    agreement:
+      method: i_squared
+      min_value: 0.5
+    ranking:
+      kind: sequential
+    max_abs_correlation: 0.8
+    n_features: 3
+  - name: sequential_mean_rank
+    reliability:
+      aggregation: weighted_mean
+      min_value: 0.75
+    relevance:
+      aggregation: mean_rank
+    agreement:
+      method: sign_consistency
+      min_value: 1.0
+    ranking:
+      kind: sequential
+    max_abs_correlation: 0.8
+    n_features: 3
+  - name: weighted_equal
+    reliability:
+      aggregation: minimum
+      min_value: -1.0
+    relevance:
+      aggregation: stratified_score
+    agreement:
+      method: i_squared
+      min_value: 0.0
+    ranking:
+      kind: weighted
+      weights:
+        reliability: 1
+        relevance: 1
+        agreement: 1
+    max_abs_correlation: 0.8
+    n_features: 3
+  - name: weighted_relevance_heavy
+    reliability:
+      aggregation: minimum
+      min_value: -1.0
+    relevance:
+      aggregation: stratified_score
+    agreement:
+      method: i_squared
+      min_value: 0.0
+    ranking:
+      kind: weighted
+      weights:
+        reliability: 0.2
+        relevance: 0.6
+        agreement: 0.2
+    max_abs_correlation: 0.8
+    n_features: 3
+  - name: relevance_only
+    reliability: null
+    relevance:
+      aggregation: stratified_score
+    agreement: null
+    ranking:
+      kind: sequential
+    max_abs_correlation: null
+    n_features: 3
+training:
+  horizons_months:
+  - 12
+  - 24
+  - 36
+  models:
+  - model:
+      kind: cox
+      name: cox_selected
+      optimizer:
+        ridge: 1.0
+        max_iterations: 25
+        tolerance: 1.0e-10
+    features:
+      from_strategy: sequential_stratified
+  - model:
+      kind: cox
+      name: cox_relevance_only
+      optimizer:
+        ridge: 1.0
+        max_iterations: 25
+        tolerance: 1.0e-10
+    features:
+      from_strategy: relevance_only
+  - model:
+      kind: horizon_logistic
+      name: logistic_ipcw_site
+      censoring: ipcw
+      intercept: site_specific
+      optimizer:
+        ridge: 1.0
+        max_iterations: 25
+        tolerance: 1.0e-10
+    features:
+      from_strategy: sequential_stratified
+  - model:
+      kind: cox
+      name: cox_reference
+      optimizer:
+        ridge: 1.0
+        max_iterations: 25
+        tolerance: 1.0e-10
+    features:
+      names:
+      - feat_strong
+      - feat_moderate
+  - model:
+      kind: cox
+      name: cox_clinical_reference
+      optimizer:
+        ridge: 1.0
+        max_iterations: 25
+        tolerance: 1.0e-10
+    features:
+      names:
+      - clin_age
+harmonization:
+  method: combat
+  covariates:
+  - clin_age
+  empirical_bayes: true
+  eb_tolerance: 0.0001
+  release_site_summaries: true
+evaluation:
+  partition: test
+  calibration_bins: 10
+  decision_thresholds:
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  site_baseline_variant: true
+  local_models: true
+  release_site_metrics: true
+  external_validation: none

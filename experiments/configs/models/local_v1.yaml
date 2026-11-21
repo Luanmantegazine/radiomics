@@ -1,0 +1,20 @@
+# Local prognostic models at one site - version 1.
+# Hyper-parameters are examples to be justified, not recommendations.
+schema_version: 1
+horizons_months: [12, 24, 36]
+data_split: {test_fraction: 0.3, seed: 7}
+min_events: 5
+models:
+  - kind: cox
+    name: cox_local
+    optimizer: {ridge: 1.0, max_iterations: 25, tolerance: 1.0e-10}
+  - kind: horizon_logistic
+    name: logistic_ipcw_local
+    censoring: ipcw
+    intercept: common   # one site: common and site-specific coincide
+    optimizer: {ridge: 1.0, max_iterations: 25, tolerance: 1.0e-10}
+  - kind: random_survival_forest
+    name: rsf_local
+    n_estimators: 200
+    min_samples_leaf: 10
+    seed: 7

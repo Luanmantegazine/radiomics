@@ -1,0 +1,60 @@
+# Radiomic extraction protocol for structural T1 - version 1.
+#
+# Any change to this file changes feature values: copy it to a new file with a
+# new config_id instead of editing it once it has been used on real data.
+#
+# The discretisation/normalisation choices mirror the legacy OASIS-3 protocol
+# (OASIS3-AD-RADIOMICS-v1.0: binWidth 25 on z-scored intensities x100, Original
+# image only). They are a starting point, not a validated optimum, and the
+# PyRadiomics release differs from the legacy pipeline (see pyproject.toml).
+schema_version: 1
+config_id: t1-original-v1
+description: Original-image shape, first-order and texture features from T1w MRI.
+modality: T1w
+preprocessing: >-
+  Inputs are expected to be already preprocessed identically at every site
+  (e.g. FreeSurfer conformed T1, 1 mm isotropic). No bias-field correction,
+  registration, skull-stripping or resampling is applied by this pipeline.
+
+validation:
+  geometry_tolerance: 0.0001
+  min_roi_voxels: 64
+  max_spacing_anisotropy: 3.0
+  expected_orientation: null
+
+settings:
+  # --- intensity normalisation (whole image z-score, then x normalizeScale) ---
+  normalize: true
+  normalizeScale: 100
+  removeOutliers: null
+  # --- discretisation: fixed bin width (IBSI "FBS") ---
+  binWidth: 25
+  binCount: null
+  # --- resampling: none; inputs must already share a voxel grid protocol ---
+  resampledPixelSpacing: null
+  interpolator: sitkBSpline
+  padDistance: 5
+  preCrop: false
+  # --- re-segmentation: none ---
+  resegmentRange: null
+  resegmentMode: absolute
+  # --- texture matrices: 3D, 26-connectivity, distance 1 ---
+  force2D: false
+  force2Ddimension: 0
+  distances: [1]
+  symmetricalGLCM: true
+  weightingNorm: null
+  gldm_a: 0
+  # --- first order ---
+  voxelArrayShift: 0
+  # --- ROI requirements ---
+  minimumROIDimensions: 3
+  minimumROISize: null
+
+image_types:
+  Original: {}
+
+feature_classes: [shape, firstorder, glcm, glrlm, glszm, gldm, ngtdm]
+
+# 14 shape + 18 first-order + 24 GLCM + 16 GLRLM + 16 GLSZM + 14 GLDM + 5 NGTDM
+expected_features_per_roi: 107

@@ -1,0 +1,73 @@
+# Local environment: PostgreSQL + MLflow + backend API + dashboard.
+#
+#   cp infrastructure/.env.example infrastructure/.env   # then edit the password
+#   docker compose -f infrastructure/docker-compose.yml up --build
+#
+# Dashboard: http://localhost:8080   API: http://localhost:8000/docs   MLflow: http://localhost:5000
+# Optional: set FEDRAD_API_TOKEN in infrastructure/.env to require a bearer token.
+name: fedradiomics
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-fedrad}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infrastructure/.env}
+      POSTGRES_DB: fedradiomics
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init-mlflow-db.sql:/docker-entrypoint-initdb.d/10-mlflow.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "fedradiomics"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mlflow:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/mlflow.Dockerfile
+    command: >
+      mlflow server --host 0.0.0.0 --port 5000
+      --backend-store-uri postgresql://${POSTGRES_USER:-fedrad}:${POSTGRES_PASSWORD}@postgres:5432/mlflow
+      --artifacts-destination /mlartifacts
+      --allowed-hosts mlflow:5000,localhost:5000,127.0.0.1:5000
+    volumes:
+      - mlartifacts:/mlartifacts
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ..
+      dockerfile: infrastructure/docker/backend.Dockerfile
+    environment:
+      FEDRAD_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-fedrad}:${POSTGRES_PASSWORD}@postgres:5432/fedradiomics
+      FEDRAD_MLFLOW_TRACKING_URI: http://mlflow:5000
+      FEDRAD_MLFLOW_ARTIFACT_ROOT: ""
+      FEDRAD_LAUNCHER: simulation
+      FEDRAD_API_TOKEN: ${FEDRAD_API_TOKEN:-}
+      FEDRAD_CORS_ORIGINS: '["http://localhost:8080"]'
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mlflow:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ../frontend
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:
+  mlartifacts:

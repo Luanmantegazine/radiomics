@@ -1,0 +1,41 @@
+# Local selection study - version 1.
+#
+# Every number below is a starting point to be justified experimentally, not a
+# recommendation: the reliability threshold, the correlation limits, the number
+# of features and the minimum number of events all need a sensitivity analysis
+# on real data before any of them is fixed.
+schema_version: 1
+study_id: local-selection-v1
+min_events: 20
+
+selectors:
+  # Modular strategy: reliability -> relevance -> redundancy.
+  - method: component
+    name: reliable_relevant_nonredundant
+    reliability: {column: min_icc, min_value: 0.75}
+    relevance: cox_score
+    redundancy: {correlation: spearman, max_abs_correlation: 0.8}
+    n_features: 10
+
+  # Reference methods.
+  - method: correlation_filter
+    name: ref_correlation_filter
+    relevance: cox_score
+    correlation: spearman
+    max_abs_correlation: 0.8
+    n_features: 10
+  - method: lasso_cox
+    name: ref_lasso_cox
+    n_features: 10
+    n_alphas: 100
+    alpha_min_ratio: 0.01
+  - method: graph_representatives
+    name: ref_graph_representatives
+    relevance: cox_score
+    correlation: spearman
+    edge_threshold: 0.8
+    n_features: 10
+
+bootstrap:
+  n_resamples: 200
+  seed: 20261116

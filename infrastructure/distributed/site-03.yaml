@@ -1,0 +1,44 @@
+# Local configuration of client-03 (stays at the site).
+# Synthetic data source for the demo; a real site uses kind: feature_table.
+client_id: client-03
+experiment_id: set-by-the-agent-flag
+coordinator_url: http://backend:8700
+token_file: /run/secrets/site_token
+seed: 20261118
+poll_wait_s: 20
+idle_timeout_s: 1800
+data_source:
+  kind: synthetic
+  n_participants: 350
+  feature_names:
+  - clin_age
+  - feat_strong
+  - feat_copy
+  - feat_noisy
+  - feat_mixed
+  - feat_moderate
+  - feat_n01
+  - feat_n02
+  - feat_n03
+  - feat_n04
+  - feat_n05
+  - feat_n06
+  - feat_n07
+  - feat_n08
+  - feat_n09
+  - feat_n10
+  derived_features:
+    feat_copy:
+      source: feat_strong
+      noise_sd: 0.15
+  log_hazard_effects:
+    feat_strong: 0.8
+    feat_noisy: 0.8
+    feat_mixed: -0.9
+    feat_moderate: 0.4
+    clin_age: 0.3
+  measurement_noise_sd:
+    feat_noisy: 2.0
+  scanner_scale: 0.6
+  biological_features:
+    clin_age: 0.8

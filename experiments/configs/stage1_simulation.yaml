@@ -1,0 +1,45 @@
+# Stage 1 - infrastructure check with three simulated sites.
+#
+# SYNTHETIC DATA: random noise used only to exercise registration,
+# configuration distribution, local execution, authorized transmission,
+# aggregation and experiment recording. No scientific meaning.
+schema_version: 1
+name: stage1-infrastructure-check
+description: >-
+  Fluxo minimo da Etapa 1 com tres clientes simulados. Rodada 1 acorda o
+  esquema comum de atributos; rodada 2 agrega momentos por atributo.
+seed: 20261116
+data_origin: synthetic
+
+privacy:
+  min_cohort_size: 10
+  min_clients_per_aggregate: 2
+
+expected_clients: [client-01, client-02, client-03]
+
+rounds:
+  - phase: infrastructure
+    task: feature_inventory
+    aggregator: schema_intersection
+  - phase: infrastructure
+    task: feature_summary
+    aggregator: pooled_moments
+
+simulation:
+  clients:
+    - client_id: client-01
+      data_source:
+        kind: synthetic
+        n_participants: 60
+        feature_names: [feat_a, feat_b, feat_c, feat_d, feat_e, feat_f]
+    - client_id: client-02
+      data_source:
+        kind: synthetic
+        n_participants: 45
+        feature_names: [feat_a, feat_b, feat_c, feat_d, feat_e, feat_f]
+    - client_id: client-03
+      data_source:
+        kind: synthetic
+        n_participants: 80
+        # feat_f is unavailable at this site -> dropped from the agreed schema
+        feature_names: [feat_a, feat_b, feat_c, feat_d, feat_e]
