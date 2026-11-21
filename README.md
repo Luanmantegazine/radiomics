@@ -473,40 +473,26 @@ Pure-Python tests run without OASIS data. The integration test uses the two pilo
 
 No OASIS-3 imaging data should be committed to this repository. The dataset is credentialed and must be obtained through the authorized OASIS/NITRC workflow. `.gitignore` must continue to exclude FreeSurfer/MRI data and result directories as appropriate.
 
-## Federated framework (MCI → AD conversion) — Stages 1–7
+## Federated framework (MCI → AD conversion)
 
-A modular federated radiomics framework is being built alongside the pipeline
-above, in `shared/`, `client/`, `coordinator/`, `backend/`, `evaluation/`,
-`experiments/`, `frontend/` and `infrastructure/`. Stage 1 (architecture,
-client/coordinator contracts, simulated clients, isolation tests), Stage 2
-(local radiomic pipeline: manifest, image/mask validation, PyRadiomics
-extraction, reproducible local outputs) and Stage 3 (reliability from repeated
-or perturbed observations, censoring-aware relevance, redundancy, local
-selectors and reference comparators) and Stage 4 (federated selection over
-reliability, prognostic relevance, between-site agreement and redundancy, with
-strategy comparison and leave-one-site-out stability) and Stage 5 (Cox models
-and horizon-specific logistic comparators with explicit censoring handling,
-trained locally or federated by exact Newton-Raphson on summed site
-contributions, on a training partition held apart from evaluation) and Stage 6
-(federated ComBat harmonization with site-effect assessment, and distributed
-evaluation: time-dependent AUC and C, IPCW Brier score, calibration, decision
-curves, local/federated/reference models and leave-one-site-out external
-validation) and Stage 7 (consolidated API with migrations, optional token,
-reports; React dashboard; Docker Compose stack with PostgreSQL, MLflow, API and
-dashboard) are implemented. They have been tested on synthetic data and
-phantoms only.
+A modular federated radiomics framework for predicting conversion from mild
+cognitive impairment to Alzheimer's disease at 12, 24 and 36 months, built
+alongside the pipeline above in `shared/`, `client/`, `coordinator/`,
+`evaluation/`, `harmonization/`, `backend/`, `experiments/`, `frontend/` and
+`infrastructure/`. All eight development stages are implemented: local
+radiomic extraction, reliability, federated feature selection, federated
+survival models, ComBat harmonization, distributed evaluation, a REST API with
+a dashboard, and a distributed deployment in which sites only make outbound
+connections. **It has been tested on synthetic data and phantoms only.**
 
-See [etapa-1](docs/arquitetura/etapa-1.md), [etapa-2](docs/arquitetura/etapa-2.md)
-[etapa-3](docs/arquitetura/etapa-3.md), [etapa-4](docs/arquitetura/etapa-4.md),
-[etapa-5](docs/arquitetura/etapa-5.md), [etapa-6](docs/arquitetura/etapa-6.md)
-and [etapa-7](docs/arquitetura/etapa-7.md) in `docs/arquitetura/`. It uses its own
-Python 3.12 environment (`pyproject.toml` + `uv.lock`), separate from
-`requirements.txt`:
+Architecture overview: [docs/arquitetura/README.md](docs/arquitetura/README.md)
+(one document per stage in the same folder). It uses its own Python 3.12
+environment (`pyproject.toml` + `uv.lock`), separate from `requirements.txt`:
 
 ```bash
-uv sync --extra backend --extra dev --extra imaging --extra science
+uv sync --extra backend --extra dev --extra imaging --extra science --extra site --extra coordinator
 uv run pytest tests/federated
-uv run python -m experiments.run_simulation --config experiments/configs/stage1_simulation.yaml
+uv run python -m experiments.run_simulation --config experiments/configs/stage6_harmonization_evaluation.yaml
 ```
 
 Full stack (PostgreSQL, MLflow, API, dashboard at http://localhost:8080):
@@ -514,4 +500,10 @@ Full stack (PostgreSQL, MLflow, API, dashboard at http://localhost:8080):
 ```bash
 cp infrastructure/.env.example infrastructure/.env
 docker compose -f infrastructure/docker-compose.yml up --build
+```
+
+Distributed demo (coordinator and three isolated site containers):
+
+```bash
+infrastructure/distributed/demo.sh
 ```
