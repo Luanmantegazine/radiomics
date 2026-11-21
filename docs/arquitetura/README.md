@@ -158,7 +158,8 @@ por site ao coordenador.
   bibliotecas), no banco e no MLflow.
 - **Verificação**: `python -m experiments.reproduce` reexecuta e compara. A
   mesma configuração dá a mesma impressão digital em simulação e em modo
-  distribuído (testado).
+  distribuído (testado). A garantia vale no mesmo ambiente; entre plataformas,
+  diferenças de arredondamento podem mudar a impressão.
 
 ## 8. Custos
 
@@ -174,7 +175,7 @@ Resultados em [custos.md](custos.md), gerados por
 
 | Item | Situação |
 |---|---|
-| Backend | 259 testes, `ruff` |
+| Backend | 260 testes, `ruff` |
 | Frontend | 16 testes, TypeScript estrito |
 | Integração contínua | GitHub Actions (`.github/workflows/ci.yml`): testes, dashboard, imagens |
 

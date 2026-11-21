@@ -142,3 +142,24 @@ def test_provenance_records_versions_and_configuration():
     }
     assert provenance["libraries"]["pyradiomics"].startswith("3.1.0")
     assert provenance["libraries"]["numpy"].startswith("1.26.")
+
+
+def test_complex_feature_values_are_never_silently_truncated(pair, monkeypatch):
+    """Eigen-decompositions can return complex numbers on some platforms."""
+    extractor = PyRadiomicsExtractor(phantoms.config())
+    real_execute = extractor._extractor.execute
+
+    def with_complex(imaginary):
+        def execute(*args, **kwargs):
+            result = dict(real_execute(*args, **kwargs))
+            result["original_shape_LeastAxisLength"] = np.complex128(
+                complex(float(result["original_shape_LeastAxisLength"]), imaginary))
+            return result
+        return execute
+
+    monkeypatch.setattr(extractor._extractor, "execute", with_complex(1e-14))
+    value = extractor.extract(*pair).features["original_shape_LeastAxisLength"]
+    assert isinstance(value, float)
+    monkeypatch.setattr(extractor._extractor, "execute", with_complex(0.5))
+    with pytest.raises(ExtractionError, match="complex_feature"):
+        extractor.extract(*pair)

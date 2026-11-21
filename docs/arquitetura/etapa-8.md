@@ -148,9 +148,19 @@ não fazem parte do fluxo.
    e o Docker criava um diretório vazio no lugar. Corrigido.
 3. **Imagem sem o pacote do agente.** A imagem não incluía o `httpx` do agente.
    Corrigido com o grupo de dependências `site`.
+4. **Atributo complexo (visto só no CI).** Na máquina do GitHub Actions, o
+   PyRadiomics devolveu um valor complexo num atributo de forma
+   (decomposição em autovalores). A conversão para real descartava a parte
+   imaginária em silêncio. Agora uma parte imaginária desprezível (ruído
+   numérico) é descartada, e uma relevante faz o caso falhar com
+   `complex_feature`; há teste.
 
 ## 7. Hipóteses e limitações
 
+- A impressão digital é garantida no mesmo ambiente (mesmas versões e mesma
+  plataforma). Entre CPUs ou bibliotecas de álgebra linear diferentes, o
+  arredondamento pode mudar dígitos finais e, portanto, a impressão; o achado 4
+  é um exemplo dessa dependência de plataforma.
 - O coordenador guarda o estado de um experimento em memória: se o processo
   parar, o experimento precisa ser reiniciado (não há retomada).
 - As rodadas são síncronas: o prazo por rodada (`--round-timeout`) limita

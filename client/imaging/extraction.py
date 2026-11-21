@@ -42,6 +42,7 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -152,6 +153,27 @@ class ExtractionResult:
     diagnostics: dict[str, Any]
 
 
+#: Largest imaginary part (relative) accepted as numerical noise.
+COMPLEX_TOLERANCE = 1e-9
+
+
+def _real(key: str, value: Any) -> float:
+    """Feature value as a real number.
+
+    Some shape features come from eigen-decompositions whose result can be
+    complex on some platforms (BLAS/CPU differences). A negligible imaginary
+    part is rounding noise and is dropped; a real one means the feature is not
+    defined for this ROI, and the case fails instead of being silently wrong.
+    """
+    array = np.asarray(value)
+    if np.iscomplexobj(array):
+        real, imaginary = float(array.real), float(array.imag)
+        if abs(imaginary) > COMPLEX_TOLERANCE * max(1.0, abs(real)):
+            raise ExtractionError("complex_feature", key)
+        return real
+    return float(array)
+
+
 def library_versions() -> dict[str, str]:
     versions = {"python": platform.python_version()}
     for package in ("pyradiomics", "numpy", "SimpleITK", "PyWavelets"):
@@ -210,7 +232,7 @@ class PyRadiomicsExtractor:
             if key.startswith(DIAGNOSTICS_PREFIX):
                 diagnostics[key.removeprefix(DIAGNOSTICS_PREFIX)] = value
                 continue
-            number = float(value)
+            number = _real(key, value)
             if not math.isfinite(number):
                 raise ExtractionError("non_finite_feature", key)
             features[key] = number
